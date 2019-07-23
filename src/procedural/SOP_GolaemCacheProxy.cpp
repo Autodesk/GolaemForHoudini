@@ -15,12 +15,15 @@ HDK_INCLUDES_START
 #include <UT/UT_StringHolder.h>
 #include <OP/OP_OperatorTable.h>
 #include <UT/UT_DSOVersion.h>
+#include <UT/UT_HDKVersion.h>
 #include <PRM/PRM_SpareData.h>
 #include <PRM/PRM_ChoiceList.h>
 #include <PRM/PRM_Range.h>
 #include <GEO/GEO_PolyCounts.h>
 #include <GEO/GEO_PrimPoly.h>
 #include <CH/CH_Manager.h>
+#include <UT/UT_Exit.h>
+#include <UT/UT_DirUtil.h>
 
 HDK_INCLUDES_END
 
@@ -169,8 +172,6 @@ class SOP_GolaemCacheProxy : public SOP_Node
 {
 private:
     bool _needsRefresh;
-
-    glm::HoudiniLogger* _logger;
 
     glm::crowdio::SimulationCacheFactory _factory;
 
@@ -777,24 +778,6 @@ SOP_GolaemCacheProxy::SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP
     : SOP_Node(net, name, op)
     , _needsRefresh(true)
 {
-    glm::useCoreDefaultAllocator();
-
-    glm::initCore(); // inits logs
-    glm::getLog()->_logSeverity[glm::Log::CROWD] = glm::Log::LOG_WARNING;
-    glm::getLog()->_logSeverity[glm::Log::SDK] = glm::Log::LOG_ERROR;
-    _logger = new glm::HoudiniLogger();
-    _logger->_node = this;
-
-    glm::crowdio::ProductDetails productDetails;
-    productDetails._fullVersion = glm::crowdio::getGolaemVersion();
-    productDetails._containerApplicationName = "Houdini";
-    productDetails._containerApplicationVersion = SYS_Version::release();
-    productDetails._notificationHandler = NULL; // todo: install viewport notification
-
-    bool allowCreatePLE = true;
-    bool deferLicenseCheck = false; // check for licenses at crowdio::init
-    glm::crowdio::setupGolaemProduct("GolaemForHoudini", ".", glm::crowdio::getGolaemMainVersion(), productDetails, deferLicenseCheck, allowCreatePLE);
-    glm::crowdio::init();
     //mySopFlags.setManagesDataIDs(true);
 }
 
@@ -808,9 +791,15 @@ OP_Node* SOP_GolaemCacheProxy::create(OP_Network* net, const char* name, OP_Oper
 //-----------------------------------------------------------------------------
 SOP_GolaemCacheProxy::~SOP_GolaemCacheProxy()
 {
-    delete _logger;
+}
+
+//-----------------------------------------------------------------------------
+static void glmDsoExit(void* data)
+{
+    GLM_UNREFERENCED(data);
 
     glm::crowdio::finish();
+    glm::theGolaemLogger::destroy();
     glm::finishCore();
 
     glm::setDefaultAllocator(NULL);
@@ -820,6 +809,20 @@ SOP_GolaemCacheProxy::~SOP_GolaemCacheProxy()
 //-----------------------------------------------------------------------------
 void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 {
+    glm::useCoreDefaultAllocator();
+
+    glm::initCore(); // inits logs
+    glm::getLog()->_logSeverity[glm::Log::CROWD] = glm::Log::LOG_WARNING;
+    glm::getLog()->_logSeverity[glm::Log::SDK] = glm::Log::LOG_ERROR;
+
+    glm::theGolaemLogger::create();
+
+    glm::crowdio::ProductDetails productDetails;
+    productDetails._fullVersion = glm::crowdio::getGolaemVersion();
+    productDetails._containerApplicationName = "Houdini";
+    productDetails._containerApplicationVersion = SYS_Version::release();
+    productDetails._notificationHandler = NULL; // todo: install viewport notification
+
     OP_Operator* op = new OP_Operator(
         "golaemCacheProxy",
         "Golaem Cache Proxy",
@@ -829,7 +832,21 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
         0,
         nullptr,
         OP_FLAG_GENERATOR);
+
     op->setOpTabSubMenuPath("Golaem");
+
+    UT_String defSource;
+    op->getDefinitionSource(defSource);
+    glm::FileName pluginPath(defSource.c_str());
+    glm::GlmString pluginDir = pluginPath.pathname();
+
+    bool allowCreatePLE = true;
+    bool deferLicenseCheck = false; // check for licenses at crowdio::init
+    glm::crowdio::setupGolaemProduct("GolaemForHoudini", pluginDir, glm::crowdio::getGolaemMainVersion(), productDetails, deferLicenseCheck, allowCreatePLE);
+    glm::crowdio::init();
+
+    UT_Exit::addExitCallback(glmDsoExit);
+
     table->addOperator(op);
 }
 

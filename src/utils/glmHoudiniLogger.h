@@ -18,7 +18,7 @@ namespace glm
     public:
         virtual ~HoudiniLogger();
         virtual void trace(glm::Log::Module module, glm::Log::Severity severity, const char* msg, const char* file, int line, const char* operation);
-
-        SOP_Node* _node;
     };
+
+    typedef glm::Singleton<HoudiniLogger> theGolaemLogger;
 } // namespace glm
