@@ -24,6 +24,7 @@ HDK_INCLUDES_START
 #include <CH/CH_Manager.h>
 #include <UT/UT_Exit.h>
 #include <UT/UT_DirUtil.h>
+#include <PY/PY_Python.h>
 
 HDK_INCLUDES_END
 
@@ -57,6 +58,7 @@ struct GolaemParams
     enum Value
     {
         CACHELIB_FILE,
+        OPEN_CACHELIB,
         CACHELIB_ITEM,
         CROWDFIELD_NAMES,
         CACHE_NAME,
@@ -66,6 +68,7 @@ struct GolaemParams
         DEST_TERRAIN,
         ENABLE_LAYOUT,
         LAYOUT_FILE,
+        OPEN_LAYOUT,
         CURRENT_FRAME,
         START_FRAME,
         END_FRAME,
@@ -111,6 +114,9 @@ static inline const char* getParamName(GolaemParams::Value value)
     case GolaemParams::CACHELIB_FILE:
         return "glmCacheLibFile";
         break;
+    case GolaemParams::OPEN_CACHELIB:
+        return "glmOpenCacheLib";
+        break;
     case GolaemParams::CACHELIB_ITEM:
         return "glmCacheLibItem";
         break;
@@ -137,6 +143,9 @@ static inline const char* getParamName(GolaemParams::Value value)
         break;
     case GolaemParams::LAYOUT_FILE:
         return "glmLayoutFile";
+        break;
+    case GolaemParams::OPEN_LAYOUT:
+        return "glmOpenLayout";
         break;
     case GolaemParams::CURRENT_FRAME:
         return "glmCurrentFrame";
@@ -175,17 +184,19 @@ private:
 
     glm::crowdio::SimulationCacheFactory _factory;
 
+    glm::GlmString _pluginDir;
+
 public:
     static PRM_Template* buildTemplates();
     static OP_Node* create(OP_Network* net, const char* name, OP_Operator* op);
-
-    static const UT_StringHolder theSOPTypeName;
 
     ~SOP_GolaemCacheProxy();
 
     virtual bool updateParmsFlags();
 
     static int onParamChanged(void* data, int index, fpreal t, const PRM_Template* tplate);
+    static int onOpenLayoutEditor(void* data, int index, fpreal t, const PRM_Template* tplate);
+    static int onOpenSimCacheLib(void* data, int index, fpreal t, const PRM_Template* tplate);
 
 private:
     SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP_Operator* op);
@@ -255,6 +266,8 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_SpareData glmCacheFileOptions(
         PRM_SpareArgs() << PRM_SpareToken(PRM_SpareData::getFileChooserPatternToken(), "*.gscb"));
 
+    static PRM_Name openCacheLibPrm(getParamName(GolaemParams::OPEN_CACHELIB), "Open");
+
     static PRM_Name cacheItemNamePrm(getParamName(GolaemParams::CACHELIB_ITEM), "Cache Library Item");
     static PRM_ChoiceList cacheNameChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, &SOP_GolaemCacheProxy::buildGolaemCacheChoice);
 
@@ -270,6 +283,8 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_Name layoutFilePrm(getParamName(GolaemParams::LAYOUT_FILE), "Layout File");
     static PRM_SpareData glmLayoutFileOptions(
         PRM_SpareArgs() << PRM_SpareToken(PRM_SpareData::getFileChooserPatternToken(), "*.gscl"));
+
+    static PRM_Name openLayoutPrm(getParamName(GolaemParams::OPEN_LAYOUT), "Open");
 
     static PRM_Default currentFrameDefault(0, "@Frame"); // set expression to link to the current frame
     static PRM_Name currentFramePrm(getParamName(GolaemParams::CURRENT_FRAME), "Current Frame");
@@ -315,7 +330,7 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_Template myTemplateList[] =
         {
             PRM_Template(
-                PRM_FILE,
+                PRM_FILE | PRM_TYPE_JOIN_NEXT,
                 1,
                 &cacheLibFilePrm,
                 &defaultParam,
@@ -325,6 +340,17 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 &glmCacheFileOptions,
                 1,
                 "Simulation Cache Library file"),
+            PRM_Template(
+                PRM_CALLBACK_NOREFRESH,
+                1,
+                &openCacheLibPrm,
+                0,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onOpenSimCacheLib,
+                0,
+                1,
+                "Open in Layout Editor"),
             PRM_Template(
                 PRM_STRING,
                 1,
@@ -414,7 +440,7 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 1,
                 "Enable Simulation Cache Layout"),
             PRM_Template(
-                PRM_FILE,
+                PRM_FILE | PRM_TYPE_JOIN_NEXT,
                 1,
                 &layoutFilePrm,
                 &defaultParam,
@@ -424,6 +450,17 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 &glmLayoutFileOptions,
                 1,
                 "Simulation Cache Layout file"),
+            PRM_Template(
+                PRM_CALLBACK_NOREFRESH,
+                1,
+                &openLayoutPrm,
+                0,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onOpenLayoutEditor,
+                0,
+                1,
+                "Open in Layout Editor"),
             PRM_Template(
                 PRM_FLT_J,
                 1,
@@ -523,6 +560,7 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::ENABLE_LAYOUT), 1);
     bool layoutEnabled = evalInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time);
     changed |= enableParm(getParamName(GolaemParams::LAYOUT_FILE), layoutEnabled);
+    changed |= enableParm(getParamName(GolaemParams::OPEN_LAYOUT), 1);
     changed |= enableParm(getParamName(GolaemParams::CURRENT_FRAME), 1);
     changed |= enableParm(getParamName(GolaemParams::START_FRAME), 0);
     changed |= enableParm(getParamName(GolaemParams::END_FRAME), 0);
@@ -774,10 +812,53 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
 }
 
 //-----------------------------------------------------------------------------
+int SOP_GolaemCacheProxy::onOpenLayoutEditor(void* data, int /*index*/, fpreal time, const PRM_Template* tplate)
+{
+    SOP_GolaemCacheProxy* sop = static_cast<SOP_GolaemCacheProxy*>(data);
+
+    const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
+    if (paramToken == getParamName(GolaemParams::OPEN_LAYOUT))
+    {
+        UT_String layoutFile;
+        sop->evalString(layoutFile, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+        glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
+        pythonCommand += glm::GlmString("launcher.LayoutEditorWindowMain(golaemHouDir=\"") + sop->_pluginDir + "\"";
+        if (layoutFile.length() > 0)
+        {
+            pythonCommand += glm::GlmString(", layoutFile=\"") + layoutFile.c_str() + "\"";
+        }
+        pythonCommand += ")";
+        PYrunPythonStatements(pythonCommand.c_str());
+    }
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int SOP_GolaemCacheProxy::onOpenSimCacheLib(void* data, int /*index*/, fpreal /*time*/, const PRM_Template* tplate)
+{
+    SOP_GolaemCacheProxy* sop = static_cast<SOP_GolaemCacheProxy*>(data);
+
+    const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
+    if (paramToken == getParamName(GolaemParams::OPEN_CACHELIB))
+    {
+        glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
+        pythonCommand += glm::GlmString("launcher.SimCacheLibWindowMain(golaemHouDir=\"") + sop->_pluginDir + "\"";
+        pythonCommand += ")";
+        PYrunPythonStatements(pythonCommand.c_str());
+    }
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
 SOP_GolaemCacheProxy::SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP_Operator* op)
     : SOP_Node(net, name, op)
     , _needsRefresh(true)
 {
+    UT_String defSource;
+    op->getDefinitionSource(defSource);
+    glm::FileName pluginPath(defSource.c_str());
+    _pluginDir = pluginPath.pathname();
+
     //mySopFlags.setManagesDataIDs(true);
 }
 

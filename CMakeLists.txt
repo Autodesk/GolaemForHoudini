@@ -10,6 +10,8 @@ project(${TARGET_GOLAEMHOUDINI})
 LIST_FILES( "src" "h;cpp" )
 list_files( "src/utils" "h;cpp" )
 list_files( "src/procedural" "h;cpp" )
+list_files( "python/glm/ui" "py" )
+list_files( "python/glm/simCacheLib" "py" )
 
 # Create a library
 add_library( ${PROJECT_NAME} SHARED ${LIST_FILES} )
@@ -28,10 +30,78 @@ target_link_libraries(${PROJECT_NAME} Houdini)
 CROWD_INSTALL_RUNTIME_LIBRARY( ${PROJECT_NAME} "procedurals/houdini" "GolaemHoudini")
 crowd_install_dependencies()
 
-message("CMAKE_CURRENT_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}")
-file( GLOB LICENSE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/licenses/*.lic )
+set( GOLAEM_SCRIPT_DIR ${CMAKE_SOURCE_DIR}/data/crowd/glmCrowd/scripts)
+set( GOLAEM_ICON_DIR ${CMAKE_SOURCE_DIR}/data/crowd/glmCrowd/icons)
+
+file(GLOB LAYOUT_ICON_FILES "${GOLAEM_ICON_DIR}/layoutToolv7/*" )
+file(GLOB EDITORS_ICON_FILES "${GOLAEM_ICON_DIR}/editors/*" )
+file(GLOB SIMCACHELIB_ICON_FILES "${GOLAEM_ICON_DIR}/libraryTool/*" )
+file(GLOB GLM_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/*.py")
+file(GLOB LAYOUT_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/layout/*.py" "${GOLAEM_SCRIPT_DIR}/glm/layout/*.json")
+file(GLOB NODZ_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/Nodz/*.py" "${GOLAEM_SCRIPT_DIR}/glm/Nodz/*.json")
+file(GLOB QTPY_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/Qtpy/*.py")
+file(GLOB SIMCACHELIB_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/simCacheLib/*.py")
+
+file(GLOB HOU_UI_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/ui/*.py")
+file(GLOB HOU_SIMCACHELIB_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/simCacheLib/*.py")
+
+file( GLOB LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*.lic")
+
 foreach( configuration "Debug" "Release" )
-    foreach( license_file ${LICENSE_FILES} )
-        install( FILES ${license_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini" )                                                          # install licenses
+
+    # install licenses
+    foreach( install_file ${LICENSE_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini" )
     endforeach()
+
+    # install layout icons
+    foreach( install_file ${LAYOUT_ICON_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/layoutToolv7" )
+    endforeach()
+
+    foreach( install_file ${EDITORS_ICON_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/editors" )
+    endforeach()
+
+    foreach( install_file ${SIMCACHELIB_ICON_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/libraryTool" )
+    endforeach()
+
+    foreach( install_file ${GLM_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm" )
+    endforeach()
+    
+    foreach( install_file ${LAYOUT_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/layout" )
+    endforeach()
+
+    foreach( install_file ${NODZ_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/Nodz" )
+    endforeach()
+
+    foreach( install_file ${QTPY_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/Qtpy" )
+    endforeach()
+
+    foreach( install_file ${HOU_UI_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    endforeach()
+
+    foreach( install_file ${HOU_SIMCACHELIB_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/simCacheLib" )
+    endforeach()
+
+    foreach( install_file ${SIMCACHELIB_SCRIPT_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/simCacheLib" )
+    endforeach()
+
+    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/__init__.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/windowWrapper.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/aboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    install( FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLibrary.png" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/" )
+
+    # devkit file
+    install(TARGETS ${GLM_PYTHONPLUGIN_TARGET_NAME} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm")
+    install(FILES "${GOLAEM_BINARIES_DIR}/devkit.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm")
+
 endforeach()
