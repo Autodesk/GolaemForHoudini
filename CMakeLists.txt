@@ -12,6 +12,7 @@ list_files( "src/utils" "h;cpp" )
 list_files( "src/procedural" "h;cpp" )
 list_files( "python/glm/ui" "py" )
 list_files( "python/glm/simCacheLib" "py" )
+list_files( "shelf" "shelf" )
 
 # Create a library
 add_library( ${PROJECT_NAME} SHARED ${LIST_FILES} )
@@ -44,8 +45,17 @@ file(GLOB SIMCACHELIB_SCRIPT_FILES "${GOLAEM_SCRIPT_DIR}/glm/simCacheLib/*.py")
 
 file(GLOB HOU_UI_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/ui/*.py")
 file(GLOB HOU_SIMCACHELIB_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/simCacheLib/*.py")
+file(GLOB HOU_SHELF_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shelf/*.shelf")
 
 file( GLOB LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*.lic")
+
+set(ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLibrary.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/glmDefaultIcon.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/glmAbout.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheLibrary.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheLayout.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheProxy.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLayout.png")
 
 foreach( configuration "Debug" "Release" )
 
@@ -91,6 +101,10 @@ foreach( configuration "Debug" "Release" )
         install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/simCacheLib" )
     endforeach()
 
+    foreach( install_file ${HOU_SHELF_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/shelf" )
+    endforeach()
+
     foreach( install_file ${SIMCACHELIB_SCRIPT_FILES} )
         install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/simCacheLib" )
     endforeach()
@@ -98,7 +112,10 @@ foreach( configuration "Debug" "Release" )
     install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/__init__.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
     install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/windowWrapper.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
     install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/aboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
-    install( FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLibrary.png" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/" )
+
+    foreach( install_file ${ROOT_ICON_FILES} )
+        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons" )
+    endforeach()
 
     # devkit file
     install(TARGETS ${GLM_PYTHONPLUGIN_TARGET_NAME} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm")

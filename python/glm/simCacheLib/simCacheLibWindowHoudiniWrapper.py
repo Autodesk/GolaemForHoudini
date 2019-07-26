@@ -36,7 +36,19 @@ class SimCacheLibWindowHoudiniWrapper(windowHoudiniWrapper.WindowHoudiniWrapper)
     # Create a sim cache proxy node, fills it from item and returns it
     #------------------------------------------------------------------
     def createSimCacheProxyFromItem(self, lib, itemIdx):
-        return
+        geoNode = hou.node("/obj").createNode("geo")
+        cacheProxy = None
+        if geoNode:
+            cacheProxy = geoNode.createNode("golaemCacheProxy")
+            if cacheProxy:
+                # update cache proxy parameters
+                cacheProxy.parm("glmCacheLibFile").set(lib.libFile)
+                item = lib.getLibItemAt(itemIdx)
+                if item.isInitialized():
+                    cacheProxy.parm("glmCacheLibItem").set(item.itemName)
+                # force reevaluating cache params
+                cacheProxy.parm("glmForceCacheLibEval").set(1)
+        return cacheProxy
 
     #------------------------------------------------------------------
     # Updates a sim cache lib from a set of nodes and returns it
