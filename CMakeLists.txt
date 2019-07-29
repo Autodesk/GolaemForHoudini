@@ -26,9 +26,24 @@ crowd_load_dependencies( ${PROJECT_NAME} )
 set_target_prefix( ${PROJECT_NAME} PLUGIN )
 set_target_postfix( ${PROJECT_NAME} PLUGIN )
 
+if( MSVC)
+	set_target_properties( ${PROJECT_NAME} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_DEBUG ON )
+endif()
+
 target_link_libraries(${PROJECT_NAME} Houdini)
 
+if(MSVC)
+    # cannot compile debug / windows
+	set( CROWD_INSTALL_SKIP_DEBUG ON )
+endif()
+
 CROWD_INSTALL_RUNTIME_LIBRARY( ${PROJECT_NAME} "procedurals/houdini" "GolaemHoudini")
+
+if(MSVC)
+    # cannot compile debug / windows
+	unset( CROWD_INSTALL_SKIP_DEBUG )
+endif()
+
 crowd_install_dependencies()
 
 set( GOLAEM_SCRIPT_DIR ${CMAKE_SOURCE_DIR}/data/crowd/glmCrowd/scripts)
@@ -58,7 +73,6 @@ list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheProxy.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLayout.png")
 
 foreach( configuration "Debug" "Release" )
-
     # install licenses
     foreach( install_file ${LICENSE_FILES} )
         install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini" )
@@ -122,3 +136,4 @@ foreach( configuration "Debug" "Release" )
     install(FILES "${GOLAEM_BINARIES_DIR}/devkit.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm")
 
 endforeach()
+
