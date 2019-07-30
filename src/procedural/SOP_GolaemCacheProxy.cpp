@@ -211,7 +211,6 @@ private:
 
     void refreshParameters(
         fpreal time,
-        bool updateDisplayMode = true,
         bool updateCache = true,
         bool updateLayout = true,
         bool updateTerrain = true,
@@ -581,7 +580,6 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
 //-----------------------------------------------------------------------------
 void SOP_GolaemCacheProxy::refreshParameters(
     fpreal time,
-    bool updateDisplayMode,
     bool updateCache,
     bool updateLayout,
     bool updateTerrain,
@@ -590,7 +588,6 @@ void SOP_GolaemCacheProxy::refreshParameters(
     if (_needsRefresh)
     {
         // force refresh after loading the node
-        updateDisplayMode = true;
         updateCache = true;
         updateLayout = true;
         updateTerrain = true;
@@ -806,7 +803,6 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     }
 
     const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
-    bool updateDisplayMode = false;
     bool updateCache = false;
     bool updateLayout = false;
     bool updateTerrain = false;
@@ -839,11 +835,7 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     {
         updateCharacterFiles = true;
     }
-    if (paramToken == getParamName(GolaemParams::DISPLAY_MODE))
-    {
-        updateDisplayMode = true;
-    }
-    sop->refreshParameters(time, updateDisplayMode, updateCache, updateLayout, updateTerrain, updateCharacterFiles);
+    sop->refreshParameters(time, updateCache, updateLayout, updateTerrain, updateCharacterFiles);
     return 1;
 }
 
@@ -1393,7 +1385,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     // Extract frame
                     FbxTime fbxTime;
-                    glm::Time glmTimeSec;
+                    // glm::Time glmTimeSec;
                     if (idGeometryFileIdx != -1)
                     {
                         float(&geometryFrameCacheData)[3] = frameData->_geoBehaviorAnimFrameInfo[geoDataIndex];
@@ -1401,11 +1393,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         fbxTime.SetGlobalTimeMode(FbxTime::eCustom, frameRate);
                         fbxTime.SetMilliSeconds(long((double)geometryFrameCacheData[0] / frameRate * 1000.0));
 
-                        glmTimeSec = (double)geometryFrameCacheData[0];
+                        // glmTimeSec = (double)geometryFrameCacheData[0];
                     }
                     else
                     {
-                        glmTimeSec = 0;
+                        // glmTimeSec = 0;
                         fbxTime = 0;
                     }
 
