@@ -670,7 +670,8 @@ void SOP_GolaemCacheProxy::refreshParameters(
         }
 
         glm::PODArray<int64_t> excludedEntities;
-        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+        const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
         for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
         {
@@ -1022,7 +1023,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1123,7 +1125,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
