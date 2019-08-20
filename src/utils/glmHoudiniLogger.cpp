@@ -37,28 +37,28 @@ namespace glm
         {
             message += "::ERROR] ";
             message += msg;
-            _node->addWarning(SOP_MESSAGE, message.c_str());
+            UTgetErrorManager()->addWarning("SOP", SOP_MESSAGE, message.c_str());
         }
         break;
         case glm::Log::LOG_WARNING:
         {
             message += "::WARNING] ";
             message += msg;
-            _node->addWarning(SOP_MESSAGE, message.c_str());
+            UTgetErrorManager()->addWarning("SOP", SOP_MESSAGE, message.c_str());
         }
         break;
         case glm::Log::LOG_INFO:
         {
             message += "::INFO] ";
             message += msg;
-            _node->addMessage(SOP_MESSAGE, message.c_str());
+            UTgetErrorManager()->addPrompt("SOP", SOP_MESSAGE, message.c_str());
         }
         break;
         case glm::Log::LOG_DEBUG:
         {
             message += "::DEBUG] ";
             message += msg;
-            _node->addMessage(SOP_MESSAGE, message.c_str());
+            UTgetErrorManager()->addMessage("SOP", SOP_MESSAGE, message.c_str());
         }
         break;
         default:

@@ -15,12 +15,18 @@ HDK_INCLUDES_START
 #include <UT/UT_StringHolder.h>
 #include <OP/OP_OperatorTable.h>
 #include <UT/UT_DSOVersion.h>
+#include <UT/UT_HDKVersion.h>
 #include <PRM/PRM_SpareData.h>
 #include <PRM/PRM_ChoiceList.h>
 #include <PRM/PRM_Range.h>
 #include <GEO/GEO_PolyCounts.h>
 #include <GEO/GEO_PrimPoly.h>
 #include <CH/CH_Manager.h>
+#include <UT/UT_Exit.h>
+#include <UT/UT_DirUtil.h>
+#include <PY/PY_Python.h>
+#include <HOM/HOM_Module.h>
+#include <HOM/HOM_shelves.h>
 
 HDK_INCLUDES_END
 
@@ -55,6 +61,7 @@ struct GolaemParams
     {
         CACHELIB_FILE,
         CACHELIB_ITEM,
+        FORCE_CACHELIB_EVAL,
         CROWDFIELD_NAMES,
         CACHE_NAME,
         CACHE_DIR,
@@ -63,6 +70,7 @@ struct GolaemParams
         DEST_TERRAIN,
         ENABLE_LAYOUT,
         LAYOUT_FILE,
+        OPEN_LAYOUT,
         CURRENT_FRAME,
         START_FRAME,
         END_FRAME,
@@ -111,6 +119,9 @@ static inline const char* getParamName(GolaemParams::Value value)
     case GolaemParams::CACHELIB_ITEM:
         return "glmCacheLibItem";
         break;
+    case GolaemParams::FORCE_CACHELIB_EVAL:
+        return "glmForceCacheLibEval";
+        break;
     case GolaemParams::CROWDFIELD_NAMES:
         return "glmCrowdFieldNames";
         break;
@@ -134,6 +145,9 @@ static inline const char* getParamName(GolaemParams::Value value)
         break;
     case GolaemParams::LAYOUT_FILE:
         return "glmLayoutFile";
+        break;
+    case GolaemParams::OPEN_LAYOUT:
+        return "glmOpenLayout";
         break;
     case GolaemParams::CURRENT_FRAME:
         return "glmCurrentFrame";
@@ -169,8 +183,7 @@ class SOP_GolaemCacheProxy : public SOP_Node
 {
 private:
     bool _needsRefresh;
-
-    glm::HoudiniLogger* _logger;
+    bool _noUpdateLoop;
 
     glm::crowdio::SimulationCacheFactory _factory;
 
@@ -178,13 +191,14 @@ public:
     static PRM_Template* buildTemplates();
     static OP_Node* create(OP_Network* net, const char* name, OP_Operator* op);
 
-    static const UT_StringHolder theSOPTypeName;
-
     ~SOP_GolaemCacheProxy();
 
     virtual bool updateParmsFlags();
 
     static int onParamChanged(void* data, int index, fpreal t, const PRM_Template* tplate);
+    static int onOpenLayoutEditor(void* data, int index, fpreal t, const PRM_Template* tplate);
+
+    void opChanged(OP_EventType reason, void* data);
 
 private:
     SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP_Operator* op);
@@ -197,11 +211,12 @@ private:
 
     void refreshParameters(
         fpreal time,
-        bool updateDisplayMode = true,
         bool updateCache = true,
         bool updateLayout = true,
         bool updateTerrain = true,
         bool updateCharacterFiles = true);
+
+    void updateCacheLibParams(fpreal time);
 };
 
 //-----------------------------------------------------------------------------
@@ -257,6 +272,8 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_Name cacheItemNamePrm(getParamName(GolaemParams::CACHELIB_ITEM), "Cache Library Item");
     static PRM_ChoiceList cacheNameChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, &SOP_GolaemCacheProxy::buildGolaemCacheChoice);
 
+    static PRM_Name forceCacheLibEvalPrm(getParamName(GolaemParams::FORCE_CACHELIB_EVAL), "Force Cache Library Evaluation");
+
     static PRM_Name crowdFieldNamesPrm(getParamName(GolaemParams::CROWDFIELD_NAMES), "CrowdField Names");
     static PRM_Name cacheNamePrm(getParamName(GolaemParams::CACHE_NAME), "Cache Name");
     static PRM_Name cacheDirPrm(getParamName(GolaemParams::CACHE_DIR), "Cache Dir");
@@ -269,6 +286,8 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_Name layoutFilePrm(getParamName(GolaemParams::LAYOUT_FILE), "Layout File");
     static PRM_SpareData glmLayoutFileOptions(
         PRM_SpareArgs() << PRM_SpareToken(PRM_SpareData::getFileChooserPatternToken(), "*.gscl"));
+
+    static PRM_Name openLayoutPrm(getParamName(GolaemParams::OPEN_LAYOUT), "Open");
 
     static PRM_Default currentFrameDefault(0, "@Frame"); // set expression to link to the current frame
     static PRM_Name currentFramePrm(getParamName(GolaemParams::CURRENT_FRAME), "Current Frame");
@@ -283,7 +302,7 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_Range drawPercentRange(PRM_RANGE_RESTRICTED, 0, PRM_RANGE_RESTRICTED, 100);
 
     static PRM_Name displayModePrm(getParamName(GolaemParams::DISPLAY_MODE), "Display Mode");
-    static PRM_Default defaultDisplayMode(0, ""); // bounding box
+    static PRM_Default defaultDisplayMode(2, ""); // skinmesh
     static PRM_Name diplayModeEnum[] =
         {
             PRM_Name("boundingBox", "Bounding Box"),
@@ -335,6 +354,17 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 0,
                 1,
                 "Simulation Cache Library item"),
+            PRM_Template(
+                PRM_TOGGLE,
+                1,
+                &forceCacheLibEvalPrm,
+                &defaultParam,
+                0,
+                0,
+                0,
+                0,
+                1,
+                "Force Cache Library evaluation"),
             PRM_Template(
                 PRM_STRING,
                 1,
@@ -413,7 +443,7 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 1,
                 "Enable Simulation Cache Layout"),
             PRM_Template(
-                PRM_FILE,
+                PRM_FILE | PRM_TYPE_JOIN_NEXT,
                 1,
                 &layoutFilePrm,
                 &defaultParam,
@@ -423,6 +453,17 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 &glmLayoutFileOptions,
                 1,
                 "Simulation Cache Layout file"),
+            PRM_Template(
+                PRM_CALLBACK_NOREFRESH,
+                1,
+                &openLayoutPrm,
+                0,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onOpenLayoutEditor,
+                0,
+                1,
+                "Open in Layout Editor"),
             PRM_Template(
                 PRM_FLT_J,
                 1,
@@ -513,6 +554,7 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     UT_String cacheLibPath;
     evalString(cacheLibPath, getParamName(GolaemParams::CACHELIB_FILE), 0, time);
     changed |= enableParm(getParamName(GolaemParams::CACHELIB_ITEM), cacheLibPath.length() > 0);
+    changed |= setVisibleState(getParamName(GolaemParams::FORCE_CACHELIB_EVAL), false);
     changed |= enableParm(getParamName(GolaemParams::CROWDFIELD_NAMES), 1);
     changed |= enableParm(getParamName(GolaemParams::CACHE_NAME), 1);
     changed |= enableParm(getParamName(GolaemParams::CACHE_DIR), 1);
@@ -522,6 +564,7 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::ENABLE_LAYOUT), 1);
     bool layoutEnabled = evalInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time);
     changed |= enableParm(getParamName(GolaemParams::LAYOUT_FILE), layoutEnabled);
+    changed |= enableParm(getParamName(GolaemParams::OPEN_LAYOUT), 1);
     changed |= enableParm(getParamName(GolaemParams::CURRENT_FRAME), 1);
     changed |= enableParm(getParamName(GolaemParams::START_FRAME), 0);
     changed |= enableParm(getParamName(GolaemParams::END_FRAME), 0);
@@ -537,7 +580,6 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
 //-----------------------------------------------------------------------------
 void SOP_GolaemCacheProxy::refreshParameters(
     fpreal time,
-    bool updateDisplayMode,
     bool updateCache,
     bool updateLayout,
     bool updateTerrain,
@@ -546,7 +588,6 @@ void SOP_GolaemCacheProxy::refreshParameters(
     if (_needsRefresh)
     {
         // force refresh after loading the node
-        updateDisplayMode = true;
         updateCache = true;
         updateLayout = true;
         updateTerrain = true;
@@ -629,7 +670,8 @@ void SOP_GolaemCacheProxy::refreshParameters(
         }
 
         glm::PODArray<int64_t> excludedEntities;
-        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+        const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
         for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
         {
@@ -681,6 +723,78 @@ void SOP_GolaemCacheProxy::refreshParameters(
 }
 
 //-----------------------------------------------------------------------------
+void SOP_GolaemCacheProxy::opChanged(OP_EventType reason, void* data)
+{
+    SOP_Node::opChanged(reason, data);
+    if (_noUpdateLoop)
+    {
+        return;
+    }
+    if (reason == OP_PARM_CHANGED)
+    {
+        int64_t paramIdx = reinterpret_cast<int64_t>(data);
+        GolaemParams::Value param = (GolaemParams::Value)(paramIdx);
+        if (param == GolaemParams::FORCE_CACHELIB_EVAL)
+        {
+            // use this to force update when setting cache lib parameters in python (from cache library)
+            _noUpdateLoop = true;
+            fpreal time = CHgetEvalTime();
+            // reset parameter
+            setInt(getParamName(GolaemParams::FORCE_CACHELIB_EVAL), 0, time, 0);
+            updateCacheLibParams(time);
+            _noUpdateLoop = false;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+void SOP_GolaemCacheProxy::updateCacheLibParams(fpreal time)
+{
+    // update cache library parameters
+    UT_String cacheLibPath;
+    evalString(cacheLibPath, getParamName(GolaemParams::CACHELIB_FILE), 0, time);
+    UT_String cacheLibItem;
+    evalString(cacheLibItem, getParamName(GolaemParams::CACHELIB_ITEM), 0, time);
+
+    glm::crowdio::SimulationCacheLibrary simuCacheLibrary;
+    loadSimulationCacheLib(simuCacheLibrary, cacheLibPath.c_str());
+
+    glm::GlmString cfNames;
+    glm::GlmString cacheName;
+    glm::GlmString cacheDir;
+    glm::GlmString characterFiles;
+    glm::GlmString srcTerrain;
+    glm::GlmString dstTerrain;
+    bool enableLayout = false;
+    glm::GlmString layoutFile;
+
+    glm::crowdio::SimulationCacheInformation* cacheInfo = simuCacheLibrary.getCacheInformationByName(cacheLibItem.c_str());
+    if (cacheInfo == NULL && simuCacheLibrary.getCacheInformationCount() > 0)
+    {
+        cacheInfo = &simuCacheLibrary.getCacheInformation(0);
+    }
+    if (cacheInfo != NULL)
+    {
+        cfNames = cacheInfo->_crowdFields;
+        cacheName = cacheInfo->_cacheName;
+        cacheDir = cacheInfo->_cacheDir;
+        characterFiles = cacheInfo->_characterFiles;
+        srcTerrain = cacheInfo->_srcTerrain;
+        dstTerrain = cacheInfo->_destTerrain;
+        enableLayout = cacheInfo->_enableLayout;
+        layoutFile = cacheInfo->_layoutFile;
+    }
+    setString(cfNames.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CROWDFIELD_NAMES), 0, time);
+    setString(cacheName.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CACHE_NAME), 0, time);
+    setString(cacheDir.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CACHE_DIR), 0, time);
+    setString(characterFiles.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CHARACTER_FILES), 0, time);
+    setString(srcTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::SOURCE_TERRAIN), 0, time);
+    setString(dstTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::DEST_TERRAIN), 0, time);
+    setInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time, enableLayout ? 1 : 0);
+    setString(layoutFile.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+}
+
+//-----------------------------------------------------------------------------
 int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time, const PRM_Template* tplate)
 {
     SOP_GolaemCacheProxy* sop = static_cast<SOP_GolaemCacheProxy*>(data);
@@ -690,7 +804,6 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     }
 
     const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
-    bool updateDisplayMode = false;
     bool updateCache = false;
     bool updateLayout = false;
     bool updateTerrain = false;
@@ -702,48 +815,7 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
         updateTerrain = true;
         updateCharacterFiles = true;
 
-        // update cache library parameters
-        UT_String cacheLibPath;
-        sop->evalString(cacheLibPath, getParamName(GolaemParams::CACHELIB_FILE), 0, time);
-        UT_String cacheLibItem;
-        sop->evalString(cacheLibItem, getParamName(GolaemParams::CACHELIB_ITEM), 0, time);
-
-        glm::crowdio::SimulationCacheLibrary simuCacheLibrary;
-        sop->loadSimulationCacheLib(simuCacheLibrary, cacheLibPath.c_str());
-
-        glm::GlmString cfNames;
-        glm::GlmString cacheName;
-        glm::GlmString cacheDir;
-        glm::GlmString characterFiles;
-        glm::GlmString srcTerrain;
-        glm::GlmString dstTerrain;
-        bool enableLayout = false;
-        glm::GlmString layoutFile;
-
-        glm::crowdio::SimulationCacheInformation* cacheInfo = simuCacheLibrary.getCacheInformationByName(cacheLibItem.c_str());
-        if (cacheInfo == NULL && simuCacheLibrary.getCacheInformationCount() > 0)
-        {
-            cacheInfo = &simuCacheLibrary.getCacheInformation(0);
-        }
-        if (cacheInfo != NULL)
-        {
-            cfNames = cacheInfo->_crowdFields;
-            cacheName = cacheInfo->_cacheName;
-            cacheDir = cacheInfo->_cacheDir;
-            characterFiles = cacheInfo->_characterFiles;
-            srcTerrain = cacheInfo->_srcTerrain;
-            dstTerrain = cacheInfo->_destTerrain;
-            enableLayout = cacheInfo->_enableLayout;
-            layoutFile = cacheInfo->_layoutFile;
-        }
-        sop->setString(cfNames.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CROWDFIELD_NAMES), 0, time);
-        sop->setString(cacheName.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CACHE_NAME), 0, time);
-        sop->setString(cacheDir.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CACHE_DIR), 0, time);
-        sop->setString(characterFiles.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CHARACTER_FILES), 0, time);
-        sop->setString(srcTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::SOURCE_TERRAIN), 0, time);
-        sop->setString(dstTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::DEST_TERRAIN), 0, time);
-        sop->setInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time, enableLayout ? 1 : 0);
-        sop->setString(layoutFile.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+        sop->updateCacheLibParams(time);
     }
     if (paramToken == getParamName(GolaemParams::CROWDFIELD_NAMES) || paramToken == getParamName(GolaemParams::CACHE_NAME) || paramToken == getParamName(GolaemParams::CACHE_DIR))
     {
@@ -764,11 +836,29 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     {
         updateCharacterFiles = true;
     }
-    if (paramToken == getParamName(GolaemParams::DISPLAY_MODE))
+    sop->refreshParameters(time, updateCache, updateLayout, updateTerrain, updateCharacterFiles);
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int SOP_GolaemCacheProxy::onOpenLayoutEditor(void* data, int /*index*/, fpreal time, const PRM_Template* tplate)
+{
+    SOP_GolaemCacheProxy* sop = static_cast<SOP_GolaemCacheProxy*>(data);
+
+    const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
+    if (paramToken == getParamName(GolaemParams::OPEN_LAYOUT))
     {
-        updateDisplayMode = true;
+        UT_String layoutFile;
+        sop->evalString(layoutFile, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+        glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
+        pythonCommand += glm::GlmString("launcher.LayoutEditorWindowMain(");
+        if (layoutFile.length() > 0)
+        {
+            pythonCommand += glm::GlmString("layoutFile=\"") + layoutFile.c_str() + "\"";
+        }
+        pythonCommand += ")\n";
+        PYrunPythonStatements(pythonCommand.c_str());
     }
-    sop->refreshParameters(time, updateDisplayMode, updateCache, updateLayout, updateTerrain, updateCharacterFiles);
     return 1;
 }
 
@@ -776,25 +866,8 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
 SOP_GolaemCacheProxy::SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP_Operator* op)
     : SOP_Node(net, name, op)
     , _needsRefresh(true)
+    , _noUpdateLoop(false)
 {
-    glm::useCoreDefaultAllocator();
-
-    glm::initCore(); // inits logs
-    glm::getLog()->_logSeverity[glm::Log::CROWD] = glm::Log::LOG_WARNING;
-    glm::getLog()->_logSeverity[glm::Log::SDK] = glm::Log::LOG_ERROR;
-    _logger = new glm::HoudiniLogger();
-    _logger->_node = this;
-
-    glm::crowdio::ProductDetails productDetails;
-    productDetails._fullVersion = glm::crowdio::getGolaemVersion();
-    productDetails._containerApplicationName = "Houdini";
-    productDetails._containerApplicationVersion = SYS_Version::release();
-    productDetails._notificationHandler = NULL; // todo: install viewport notification
-
-    bool allowCreatePLE = true;
-    bool deferLicenseCheck = false; // check for licenses at crowdio::init
-    glm::crowdio::setupGolaemProduct("GolaemForHoudini", ".", glm::crowdio::getGolaemMainVersion(), productDetails, deferLicenseCheck, allowCreatePLE);
-    glm::crowdio::init();
     //mySopFlags.setManagesDataIDs(true);
 }
 
@@ -808,9 +881,15 @@ OP_Node* SOP_GolaemCacheProxy::create(OP_Network* net, const char* name, OP_Oper
 //-----------------------------------------------------------------------------
 SOP_GolaemCacheProxy::~SOP_GolaemCacheProxy()
 {
-    delete _logger;
+}
+
+//-----------------------------------------------------------------------------
+static void glmDsoExit(void* data)
+{
+    GLM_UNREFERENCED(data);
 
     glm::crowdio::finish();
+    glm::theGolaemLogger::destroy();
     glm::finishCore();
 
     glm::setDefaultAllocator(NULL);
@@ -820,6 +899,20 @@ SOP_GolaemCacheProxy::~SOP_GolaemCacheProxy()
 //-----------------------------------------------------------------------------
 void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 {
+    glm::useCoreDefaultAllocator();
+
+    glm::initCore(); // inits logs
+    glm::getLog()->_logSeverity[glm::Log::CROWD] = glm::Log::LOG_WARNING;
+    glm::getLog()->_logSeverity[glm::Log::SDK] = glm::Log::LOG_ERROR;
+
+    glm::theGolaemLogger::create();
+
+    glm::crowdio::ProductDetails productDetails;
+    productDetails._fullVersion = glm::crowdio::getGolaemVersion();
+    productDetails._containerApplicationName = "Houdini";
+    productDetails._containerApplicationVersion = SYS_Version::release();
+    productDetails._notificationHandler = NULL; // todo: install viewport notification
+
     OP_Operator* op = new OP_Operator(
         "golaemCacheProxy",
         "Golaem Cache Proxy",
@@ -829,8 +922,41 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
         0,
         nullptr,
         OP_FLAG_GENERATOR);
+
     op->setOpTabSubMenuPath("Golaem");
+    op->setIconName("SimulationCacheProxy.png");
+
+    UT_String defSource;
+    op->getDefinitionSource(defSource);
+    glm::FileName pluginPath(defSource.c_str());
+    glm::GlmString pluginDir = pluginPath.pathname();
+
+    bool allowCreatePLE = true;
+    bool deferLicenseCheck = false; // check for licenses at crowdio::init
+    glm::crowdio::setupGolaemProduct("GolaemForHoudini", pluginDir, productDetails, deferLicenseCheck, allowCreatePLE);
+    glm::crowdio::init();
+
+    UT_Exit::addExitCallback(glmDsoExit);
+
     table->addOperator(op);
+
+    glm::GlmString licenseInfo = glm::crowdio::getLicenseRLMString();
+    if (glm::crowdio::hasFullLicenseFeatures())
+    {
+        licenseInfo = "1;" + licenseInfo;
+    }
+    else
+    {
+        licenseInfo = "0;" + licenseInfo;
+    }
+
+    // init python session structure
+    glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
+    pythonCommand += glm::GlmString("launcher.glmSessionInfo._pluginDir=\"") + pluginDir + "\"\n";
+    pythonCommand += glm::GlmString("launcher.glmSessionInfo._version=\"") + glm::crowdio::getGolaemVersion() + "\"\n";
+    pythonCommand += glm::GlmString("launcher.glmSessionInfo._licenseInfo=\"") + licenseInfo + "\"\n";
+
+    PYrunPythonStatements(pythonCommand.c_str());
 }
 
 //-----------------------------------------------------------------------------
@@ -897,7 +1023,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -998,7 +1125,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory());
+            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1260,7 +1388,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     // Extract frame
                     FbxTime fbxTime;
-                    glm::Time glmTimeSec;
+                    // glm::Time glmTimeSec;
                     if (idGeometryFileIdx != -1)
                     {
                         float(&geometryFrameCacheData)[3] = frameData->_geoBehaviorAnimFrameInfo[geoDataIndex];
@@ -1268,11 +1396,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         fbxTime.SetGlobalTimeMode(FbxTime::eCustom, frameRate);
                         fbxTime.SetMilliSeconds(long((double)geometryFrameCacheData[0] / frameRate * 1000.0));
 
-                        glmTimeSec = (double)geometryFrameCacheData[0];
+                        // glmTimeSec = (double)geometryFrameCacheData[0];
                     }
                     else
                     {
-                        glmTimeSec = 0;
+                        // glmTimeSec = 0;
                         fbxTime = 0;
                     }
 
