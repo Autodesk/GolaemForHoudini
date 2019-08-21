@@ -45,10 +45,6 @@ HDK_INCLUDES_END
 #include <glmCrowdGcgCharacter.h>
 #include <glmCrowdGcgBaker.h>
 
-#ifndef GLM_GEO_ENGINE_VERSION
-#define GLM_GEO_ENGINE_VERSION 1
-#endif
-
 #include "glmCrowdHoudiniPluginAPI.h"
 
 glm::Mutex _glmCrowdGeoMutex;
