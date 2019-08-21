@@ -622,7 +622,13 @@ void SOP_GolaemCacheProxy::refreshParameters(
         evalString(layoutFile, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
         if (enableLayout && layoutFile.length() > 0)
         {
-            _factory.loadLayoutHistoryFile(layoutFile.c_str());
+			glm::GlmString layoutFiles = layoutFile.buffer();
+			glm::Array<glm::GlmString> layoutFilesParsed;
+			glm::split(layoutFiles, ";", layoutFilesParsed);
+			for (size_t iLayout = 0; iLayout < layoutFilesParsed.size(); iLayout++)
+			{
+				_factory.loadLayoutHistoryFile(iLayout, layoutFilesParsed[iLayout].c_str());
+			}
         }
     }
     if (updateTerrain)
@@ -661,8 +667,8 @@ void SOP_GolaemCacheProxy::refreshParameters(
             continue;
         }
         glm::crowdio::CachedSimulation& cachedSimulation = _factory.getCachedSimulation(cacheDir.c_str(), cacheName.c_str(), cfName.c_str());
-        const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getModifiedSimulationData();
-        const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getModifiedFrameData(currentFrame, true);
+        const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getFinalSimulationData();
+        const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getFinalFrameData(currentFrame, UINT32_MAX, true);
 
         if (simuData == NULL || frameData == NULL)
         {
@@ -670,8 +676,9 @@ void SOP_GolaemCacheProxy::refreshParameters(
         }
 
         glm::PODArray<int64_t> excludedEntities;
-        const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
-        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
+		glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+		cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
         for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
         {
@@ -1014,8 +1021,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 continue;
             }
             glm::crowdio::CachedSimulation& cachedSimulation = _factory.getCachedSimulation(cacheDir.c_str(), cacheName.c_str(), cfName.c_str());
-            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getModifiedSimulationData();
-            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getModifiedFrameData(currentFrame, true);
+            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getFinalSimulationData();
+            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getFinalFrameData(currentFrame, UINT32_MAX, true);
 
             if (simuData == NULL || frameData == NULL)
             {
@@ -1023,8 +1030,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
+			glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+			cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1116,8 +1124,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 continue;
             }
             glm::crowdio::CachedSimulation& cachedSimulation = _factory.getCachedSimulation(cacheDir.c_str(), cacheName.c_str(), cfName.c_str());
-            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getModifiedSimulationData();
-            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getModifiedFrameData(currentFrame, true);
+            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getFinalSimulationData();
+            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getFinalFrameData(currentFrame, UINT32_MAX, true);
 
             if (simuData == NULL || frameData == NULL)
             {
@@ -1125,8 +1133,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-            const glm::crowdio::glmHistoryRuntimeStructure* historyStructure = cachedSimulation.getHistoryRuntimeStructure();
-            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistory(), historyStructure);
+			glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+			cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1182,7 +1191,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 }
 
                 // compute assets if needed
-                const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getModifiedEntityAssets();
+                const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getModifiedEntityAssets(_factory.getLayoutHistoryCount()==0 ? 0: _factory.getLayoutHistoryCount() - 1);
 
                 glm::Array<glm::GlmString> meshAssetNames;
                 glm::PODArray<int> furAssetIds;
