@@ -1009,6 +1009,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     {
     case GolaemDisplayMode::BOUNDING_BOX:
     {
+        GEO_PolyCounts polyCounts;
+        UT_IntArray polygonpointnumbers;
+
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
         {
@@ -1093,17 +1096,228 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 float* rootPos = frameData->_bonePositions[positionOffset];
                 float characterScale = simuData->_scales[iEntity];
                 halfExtents *= characterScale;
-                gdp->cube(
-                    rootPos[0] - halfExtents[0], rootPos[0] + halfExtents[0],
-                    rootPos[1] - halfExtents[1], rootPos[1] + halfExtents[1],
-                    rootPos[2] - halfExtents[2], rootPos[2] + halfExtents[2],
-                    0, 0, 0, 0, 1);
+
+                GA_Offset pointStartOffset = gdp->appendPointBlock(8);
+
+                gdp->setPos3(pointStartOffset,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 1,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 2,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 3,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 4,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 5,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 6,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 7,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                polyCounts.clear();
+                polygonpointnumbers.clear();
+                // cube = 6 faces
+                for (size_t iFace = 0; iFace < 6; ++iFace)
+                {
+                    polyCounts.append(4);
+                }
+
+                // face 0
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(3);
+
+                // face 1
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(6);
+                polygonpointnumbers.append(5);
+
+                // face 2
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(3);
+                polygonpointnumbers.append(7);
+                polygonpointnumbers.append(6);
+
+                // face 3
+                polygonpointnumbers.append(3);
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(4);
+                polygonpointnumbers.append(7);
+
+                // face 4
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(5);
+                polygonpointnumbers.append(4);
+
+                // face 5
+                polygonpointnumbers.append(4);
+                polygonpointnumbers.append(5);
+                polygonpointnumbers.append(6);
+                polygonpointnumbers.append(7);
+
+                GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 8, polyCounts, polygonpointnumbers.array(), false);
             }
         }
     }
     break;
     case GolaemDisplayMode::SKELETON:
     {
+        GEO_PolyCounts polyCounts;
+        UT_IntArray polygonpointnumbers;
+
+        glm::Array<glm::PODArray<size_t>> sortedBonesInversePerChar(_factory.getGolaemCharacters().size());
+        for (int iChar = 0, charCount = _factory.getGolaemCharacters().sizeInt(); iChar < charCount; ++iChar)
+        {
+            glm::PODArray<size_t>& sortedBonesInverse = sortedBonesInversePerChar[iChar];
+            const glm::GolaemCharacter* character = _factory.getGolaemCharacter(iChar);
+            if (character == NULL)
+            {
+                continue;
+            }
+            const glm::PODArray<size_t>& sortedBones = character->_converterMapping._skeletonDescription->getSortedBones();
+            sortedBonesInverse.resize(sortedBones.size());
+            for (size_t iBone = 0, boneCount = sortedBones.size(); iBone < boneCount; ++iBone)
+            {
+                sortedBonesInverse[sortedBones[iBone]] = iBone;
+            }
+        }
+        glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
+        for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
+        {
+            const glm::GlmString& cfName = crowdFieldNames[iCf];
+            if (cfName.empty())
+            {
+                continue;
+            }
+            glm::crowdio::CachedSimulation& cachedSimulation = _factory.getCachedSimulation(cacheDir.c_str(), cacheName.c_str(), cfName.c_str());
+            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getFinalSimulationData();
+            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getFinalFrameData(currentFrame, UINT32_MAX, true);
+
+            if (simuData == NULL || frameData == NULL)
+            {
+                continue;
+            }
+
+            glm::PODArray<int64_t> excludedEntities;
+            glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+            cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
+            size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
+            for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
+            {
+                int64_t entityId = simuData->_entityIds[iEntity];
+                if (entityId < 0)
+                {
+                    // entity was probably killed
+                    continue;
+                }
+
+                bool excludedEntity = frameData->_entityEnabled[iEntity] != 1;
+                if (!excludedEntity)
+                {
+                    excludedEntity = iEntity >= maxEntities;
+                    if (!excludedEntity)
+                    {
+                        size_t excludedEntityIdx;
+                        excludedEntity = glm::glmFindIndex(excludedEntities.begin(), excludedEntities.end(), entityId, excludedEntityIdx);
+                    }
+                }
+
+                if (excludedEntity)
+                {
+                    continue;
+                }
+
+                int32_t characterIdx = simuData->_characterIdx[iEntity];
+                const glm::GolaemCharacter* character = _factory.getGolaemCharacter(characterIdx);
+                if (character == NULL)
+                {
+                    GLM_CROWD_TRACE_ERROR_LIMIT("The entity '" << entityId << "' has an invalid character index: '" << characterIdx << "'. Skipping it. Please assign a Rendering Type from the Rendering Attributes panel");
+                    continue;
+                }
+
+                ++entityCount;
+
+                glm::PODArray<size_t>& sortedBonesInverse = sortedBonesInversePerChar[characterIdx];
+
+                uint16_t entityType = simuData->_entityTypes[iEntity];
+
+                uint16_t boneCount = simuData->_boneCount[entityType];
+
+                uint32_t positionOffset = simuData->_iBoneOffsetPerEntityType[entityType] + simuData->_indexInEntityType[iEntity] * boneCount;
+
+                // set the bone positions
+                GA_Offset pointStartOffset = gdp->appendPointBlock(boneCount);
+                for (uint16_t iBone = 0; iBone < boneCount; ++iBone)
+                {
+                    float* bonePos = frameData->_bonePositions[positionOffset + iBone];
+                    gdp->setPos3(pointStartOffset + iBone,
+                                 UT_Vector3(
+                                     bonePos[0],
+                                     bonePos[1],
+                                     bonePos[2]));
+                }
+
+                const glm::PODArray<glm::HierarchicalBone*>& hBones = character->_converterMapping._skeletonDescription->getBones();
+                const glm::PODArray<size_t>& sortedBones = character->_converterMapping._skeletonDescription->getSortedBones();
+
+                for (int iBone = 0, primCount = glm::min(sortedBones.sizeInt(), (int)boneCount); iBone < primCount; ++iBone)
+                {
+                    const glm::HierarchicalBone* hBone = hBones[sortedBones[iBone]];
+                    const glm::HierarchicalBone* hBoneParent = hBone->getFather();
+                    if (hBoneParent == NULL)
+                    {
+                        continue;
+                    }
+                    int parentIdx = hBoneParent->getSpecificBoneIndex();
+                    int parentIdxInCache = (int)sortedBonesInverse[parentIdx];
+
+                    polyCounts.clear();
+                    polygonpointnumbers.clear();
+                    polyCounts.append(2); // polygon size = 2
+                    polygonpointnumbers.append(iBone);
+                    polygonpointnumbers.append(parentIdxInCache);
+
+                    GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 2, polyCounts, polygonpointnumbers.array(), false);
+                }
+            }
+        }
     }
     break;
     case GolaemDisplayMode::SKINMESH:
@@ -1558,7 +1772,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vertexCount, polyCounts, polygonpointnumbers.array());
 
-                        gdp->bumpDataIdsForAddOrRemove(true, true, true);
+                        //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
 
                     // reset character to default pose
@@ -1654,7 +1868,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vtxCount, polyCounts, polygonpointnumbers.array());
 
-                        gdp->bumpDataIdsForAddOrRemove(true, true, true);
+                        //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
                 }
             }
