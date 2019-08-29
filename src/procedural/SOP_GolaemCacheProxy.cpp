@@ -75,6 +75,7 @@ struct GolaemParams
         DRAW_PERCENT,
         DISPLAY_MODE,
         GEO_TAG,
+        SHADER_PATH,
         END
     };
 };
@@ -169,6 +170,9 @@ static inline const char* getParamName(GolaemParams::Value value)
         break;
     case GolaemParams::GEO_TAG:
         return "glmGeoTag";
+        break;
+    case GolaemParams::SHADER_PATH:
+        return "glmShaderPath";
         break;
     case GolaemParams::END:
         break;
@@ -356,6 +360,9 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
         };
 
     static PRM_ChoiceList geoTagsChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, geoTagsEnum);
+
+    static PRM_Name shaderPathPrm(getParamName(GolaemParams::SHADER_PATH), "Shader Path");
+    static PRM_Default shaderPathDefault(0, "/mat");
 
     static PRM_Template myTemplateList[] =
         {
@@ -551,6 +558,17 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 0,
                 1,
                 "Geometry Tag"),
+            PRM_Template(
+                PRM_STRING,
+                1,
+                &shaderPathPrm,
+                &shaderPathDefault,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onParamChanged,
+                0,
+                1,
+                "Shader Path"),
             PRM_Template() // sentinel
         };
     return myTemplateList;
@@ -582,6 +600,7 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::DISPLAY_MODE), 1);
     GolaemDisplayMode::Value displayMode = (GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
     changed |= enableParm(getParamName(GolaemParams::GEO_TAG), displayMode == GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::SHADER_PATH), displayMode == GolaemDisplayMode::SKINMESH);
     //PRM_Parm* parm = getParmPtr("glmCacheIdx");
     return changed;
 }
@@ -1005,6 +1024,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     short geoTag = static_cast<short>(evalInt(getParamName(GolaemParams::GEO_TAG), 0, time));
     int64_t entityCount = 0;
 
+    UT_String shaderPath;
+    evalString(shaderPath, getParamName(GolaemParams::SHADER_PATH), 0, time);
+
+    glm::GlmString entityIdAttrName = "glmEntityId";
+
     switch (displayMode)
     {
     case GolaemDisplayMode::BOUNDING_BOX:
@@ -1191,7 +1215,14 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 polygonpointnumbers.append(6);
                 polygonpointnumbers.append(7);
 
-                GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 8, polyCounts, polygonpointnumbers.array(), false);
+                GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 8, polyCounts, polygonpointnumbers.array(), false);
+
+                GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+                for (size_t iFace = 0; iFace < 6; ++iFace)
+                {
+                    entityIdAttrHandle.set(primOffset + iFace, entityId);
+                }
             }
         }
     }
@@ -1314,7 +1345,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     polygonpointnumbers.append(iBone);
                     polygonpointnumbers.append(parentIdxInCache);
 
-                    GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 2, polyCounts, polygonpointnumbers.array(), false);
+                    GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 2, polyCounts, polygonpointnumbers.array(), false);
+
+                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                    GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+                    entityIdAttrHandle.set(primOffset, entityId);
                 }
             }
         }
@@ -1327,6 +1362,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
         GEO_PolyCounts polyCounts;
         UT_IntArray polygonpointnumbers;
+
+        glm::GlmString meshAttrName = "glmMeshName";
+        glm::GlmString shaderAttrName = "shop_materialpath";
 
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
@@ -1349,6 +1387,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
             cachedSimulation.getHistoryRuntimeStructures(historyStructures);
             glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
+
+            const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
+
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1579,7 +1620,89 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 }
 
                 // TODO: see if fur is needed
+
+                // compute shaders
+                const glm::Array<glm::GlmString>& shaderData = shaderDataContainer->data[iEntity];
+
+                glm::GlmMap<size_t, size_t> globalToIntShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToFloatShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToStringShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToVectorShaderAttrIdx;
+
+                glm::PODArray<int> intAttrValues;
+                glm::PODArray<float> floatAttrValues;
+                glm::Array<glm::GlmString> stringAttrValues;
+                glm::Array<glm::Vector3> vectorAttrValues;
+
+                for (size_t iShaderAttr = 0, shaderAttrCount = character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
+                {
+                    const glm::GlmString& attrValueStr = shaderData[iShaderAttr];
+                    const glm::ShaderAttribute& shaderAttr = character->_shaderAttributes[iShaderAttr];
+                    switch (shaderAttr._type)
+                    {
+                    case glm::ShaderAttributeType::INT:
+                    {
+
+                        globalToIntShaderAttrIdx[iShaderAttr] = intAttrValues.size();
+                        intAttrValues.addOne();
+                        glm::fromString<int>(attrValueStr, intAttrValues.back());
+                    }
+                    break;
+                    case glm::ShaderAttributeType::FLOAT:
+                    {
+
+                        globalToFloatShaderAttrIdx[iShaderAttr] = floatAttrValues.size();
+                        floatAttrValues.addOne();
+                        glm::fromString<float>(attrValueStr, floatAttrValues.back());
+                    }
+                    break;
+                    case glm::ShaderAttributeType::STRING:
+                    {
+
+                        globalToStringShaderAttrIdx[iShaderAttr] = stringAttrValues.size();
+                        stringAttrValues.addOne();
+                        stringAttrValues.back() = attrValueStr;
+                    }
+                    break;
+                    case glm::ShaderAttributeType::VECTOR:
+                    {
+                        globalToVectorShaderAttrIdx[iShaderAttr] = vectorAttrValues.size();
+                        vectorAttrValues.addOne();
+                        glm::fromString(attrValueStr, vectorAttrValues.back());
+                    }
+                    break;
+                    default:
+                        break;
+                    }
+                }
+
                 size_t meshCount = meshAssetNameIndices.size();
+
+                glm::PODArray<int> meshShadingGroups(meshCount, -1);
+
+                for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                {
+                    const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+                    int& shadingGroupIdx = meshShadingGroups[iMesh];
+
+                    // find shader assets
+                    unsigned int iMaterial = meshAssetMaterialIndices[iMesh];
+                    int meshAssetIdx = character->findMeshAssetIdx(meshName);
+                    if (meshAssetIdx != -1)
+                    {
+                        const glm::MeshAsset& meshAsset = character->_meshAssets[meshAssetIdx];
+                        if (iMaterial < meshAsset._shadingGroups.size())
+                        {
+                            shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
+                        }
+                    }
+
+                    if (shadingGroupIdx == -1)
+                    {
+                        GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
+                    }
+                }
+
                 if (assetFileExtension == "fbx")
                 {
                     // glmComputeCharacterRenderDataFbx
@@ -1591,12 +1714,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     FbxAMatrix geomTransform;
                     bool hasTransform(false);
                     FbxMesh* mesh(NULL);
-                    //FbxLayer* layer(NULL);
-                    //FbxLayerElementUV* uvElement(NULL);
+                    FbxLayer* layer(NULL);
+                    FbxLayerElementUV* uvElement(NULL);
                     FbxLayerElementMaterial* materialElement(NULL);
                     FbxVector4* meshVertices(NULL);
                     FbxVector4 meshVertex;
-                    //FbxVector4 tempNormal;
+                    FbxVector4 tempNormal;
                     //FbxLayerElementTangent* tangentsElement = NULL;
                     //FbxLayerElementBinormal* binormalsElement = NULL;
 
@@ -1671,6 +1794,13 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         mesh = fbxCharacter->getCharacterFBXMesh(iMesh);
 
                         hasTransform = !(nodeTransform == identityMatrix);
+
+                        layer = mesh->GetLayer(0);
+                        bool hasNormals = false;
+                        if (layer != NULL)
+                        {
+                            hasNormals = layer->GetNormals() != NULL;
+                        }
 
                         glm::PODArray<int> vertexMasks;
                         glm::PODArray<int> polygonMasks;
@@ -1765,12 +1895,225 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                 polyCounts.append(polySize);
                                 for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
                                 {
-                                    polygonpointnumbers.append(vertexMasks[mesh->GetPolygonVertex(iFbxPoly, iPolyVertex)]);
+                                    // reverse polygon order
+                                    polygonpointnumbers.append(vertexMasks[mesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)]);
                                 } // iPolyVertex
                             }
                         }
 
-                        GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vertexCount, polyCounts, polygonpointnumbers.array());
+                        GA_Size actualPolyCount = polyCounts.getNumPolygons();
+
+                        GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vertexCount, polyCounts, polygonpointnumbers.array());
+
+                        GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                        GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+
+                        GA_Attribute* meshAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, meshAttrName.c_str(), 1);
+                        GA_RWHandleS meshAttrHandle(meshAttr);
+
+                        const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+
+                        GA_Attribute* shaderAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shaderAttrName.c_str(), 1);
+                        GA_RWHandleS shaderAttrHandle(shaderAttr);
+
+                        int shadingGroupIdx = meshShadingGroups[iMesh];
+                        glm::GlmString shadingGroupName = "";
+                        if (shadingGroupIdx >= 0)
+                        {
+                            const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
+                            shadingGroupName = shaderPath.c_str();
+                            shadingGroupName.rtrim("/");
+                            shadingGroupName += glm::GlmString("/") + shGroup._name;
+                            shadingGroupName = glm::replaceString(shadingGroupName, ":", "_");
+
+                            // add shading group attributes
+                            for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
+                            {
+                                int shAttrIdx = shGroup._shaderAttributes[iShAttr];
+                                const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                switch (shAttr._type)
+                                {
+                                case glm::ShaderAttributeType::INT:
+                                {
+                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleI attrHandle(attr);
+                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                    int attrValue = intAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::FLOAT:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleF attrHandle(attr);
+                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                    float attrValue = floatAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::STRING:
+                                {
+                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleS attrHandle(attr);
+                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::VECTOR:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    GA_RWHandleV3 attrHandle(attr);
+                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(
+                                            primOffset + iPoly,
+                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                    }
+                                }
+                                break;
+                                default:
+                                    break;
+                                }
+                            }
+                        }
+
+                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                        {
+                            entityIdAttrHandle.set(primOffset + iPoly, entityId);
+                            meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
+                            shaderAttrHandle.set(primOffset + iPoly, shadingGroupName.c_str());
+                        }
+
+                        GA_Primitive* prim = gdp->getPrimitive(primOffset);
+                        GA_Offset vertexOffset = prim->getVertexOffset(0);
+                        if (hasNormals)
+                        {
+                            // add normals
+
+                            // normals are always stored per polygon vertex
+                            GA_Attribute* normalAttr = gdp->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
+                            GA_RWHandleV3 normalAttrHandle(normalAttr);
+
+                            FbxAMatrix globalRotate(identityMatrix);
+                            globalRotate.SetR(nodeTransform.GetR());
+                            bool hasRotate = globalRotate != identityMatrix;
+                            // normals are always stored by polygon vertex
+                            exint actualIndexByPolyVertex = 0;
+                            for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                            {
+                                if (polygonMasks[iFbxPoly])
+                                {
+                                    for (int iPolyVertex = 0, polySize = mesh->GetPolygonSize(iFbxPoly); iPolyVertex < polySize; ++iPolyVertex, ++actualIndexByPolyVertex)
+                                    {
+                                        // reverse polygon order
+                                        mesh->GetPolygonVertexNormal(iFbxPoly, polySize - 1 - iPolyVertex, tempNormal);
+                                        if (hasRotate)
+                                        {
+                                            tempNormal = globalRotate.MultT(tempNormal);
+                                        }
+
+                                        normalAttrHandle.set(
+                                            vertexOffset + actualIndexByPolyVertex,
+                                            UT_Vector3F((float)tempNormal[0], (float)tempNormal[1], (float)tempNormal[2]));
+
+                                    } // iPolyVertex
+                                }
+                            } // iPoly
+                        }
+
+                        // find how many uv layers are available
+                        int uvSetCount = mesh->GetLayerCount(FbxLayerElement::eUV);
+                        uvElement = NULL;
+                        for (int iUVSet = 0; iUVSet < uvSetCount; ++iUVSet)
+                        {
+                            glm::GlmString attrName = "uv";
+                            if (iUVSet > 0)
+                            {
+                                attrName += glm::toString(iUVSet + 1);
+                            }
+                            layer = mesh->GetLayer(mesh->GetLayerTypedIndex((int)iUVSet, FbxLayerElement::eUV));
+                            uvElement = layer->GetUVs();
+                            bool uvsByControlPoint = uvElement->GetMappingMode() == FbxLayerElement::eByControlPoint;
+                            bool uvReferenceDirect = uvElement->GetReferenceMode() == FbxLayerElement::eDirect;
+
+                            GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                            uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
+                            GA_RWHandleV2 uvAttrHandle(uvAttr);
+
+                            if (uvsByControlPoint)
+                            {
+                                // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                int uvIndex;
+                                int actualIndexByPolyVertex = 0;
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    int polySize = mesh->GetPolygonSize(iFbxPoly);
+                                    if (polygonMasks[iFbxPoly])
+                                    {
+                                        for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                        {
+                                            // reverse polygon order
+                                            uvIndex = vertexMasks[mesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)];
+                                            if (!uvReferenceDirect)
+                                            {
+                                                uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                            }
+                                            FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                            uvAttrHandle.set(
+                                                vertexOffset + actualIndexByPolyVertex,
+                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+
+                                            ++actualIndexByPolyVertex;
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                int uvIndex;
+                                int actualIndexByPolyVertex = 0;
+                                int fbxIndexByPolyVertex = 0;
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    int polySize = mesh->GetPolygonSize(iFbxPoly);
+                                    if (polygonMasks[iFbxPoly])
+                                    {
+                                        for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                        {
+                                            // reverse polygon order
+                                            uvIndex = fbxIndexByPolyVertex + polySize - 1 - iPolyVertex;
+                                            if (!uvReferenceDirect)
+                                            {
+                                                uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                            }
+
+                                            FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                            uvAttrHandle.set(
+                                                vertexOffset + actualIndexByPolyVertex,
+                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+
+                                            ++actualIndexByPolyVertex;
+                                        } // iPolyVertex
+                                    }
+                                    fbxIndexByPolyVertex += polySize;
+                                } // iPoly
+                            }
+                        }
 
                         //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
@@ -1824,7 +2167,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
                     {
-
                         if (deformedVertices[iMesh].empty() || deformedNormals[iMesh].empty())
                         {
                             continue;
@@ -1860,13 +2202,201 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         {
                             uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
                             polyCounts.append(polySize);
-                            for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx, ++iVertex)
+                            for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
                             {
-                                polygonpointnumbers.append(assetFileMesh._polygonsVertexIndices[iVertex]);
+                                // reverse polygon order
+                                polygonpointnumbers.append(assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx]);
+                            }
+                            iVertex += polySize;
+                        }
+
+                        GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vtxCount, polyCounts, polygonpointnumbers.array());
+
+                        GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                        GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+
+                        GA_Attribute* meshAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, meshAttrName.c_str(), 1);
+                        GA_RWHandleS meshAttrHandle(meshAttr);
+
+                        const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+
+                        GA_Attribute* shaderAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shaderAttrName.c_str(), 1);
+                        GA_RWHandleS shaderAttrHandle(shaderAttr);
+
+                        int shadingGroupIdx = meshShadingGroups[iMesh];
+                        glm::GlmString shadingGroupName = "";
+                        if (shadingGroupIdx >= 0)
+                        {
+                            const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
+                            shadingGroupName = shaderPath.c_str();
+                            shadingGroupName.rtrim("/");
+                            shadingGroupName += glm::GlmString("/") + shGroup._name;
+                            shadingGroupName = glm::replaceString(shadingGroupName, ":", "_");
+
+                            // add shading group attributes
+                            for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
+                            {
+                                int shAttrIdx = shGroup._shaderAttributes[iShAttr];
+                                const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                switch (shAttr._type)
+                                {
+                                case glm::ShaderAttributeType::INT:
+                                {
+                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleI attrHandle(attr);
+                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                    int attrValue = intAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::FLOAT:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleF attrHandle(attr);
+                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                    float attrValue = floatAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::STRING:
+                                {
+                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleS attrHandle(attr);
+                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::VECTOR:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    GA_RWHandleV3 attrHandle(attr);
+                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(
+                                            primOffset + iPoly,
+                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                    }
+                                }
+                                break;
+                                default:
+                                    break;
+                                }
                             }
                         }
 
-                        GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vtxCount, polyCounts, polygonpointnumbers.array());
+                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                        {
+                            entityIdAttrHandle.set(primOffset + iPoly, entityId);
+                            meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
+                            shaderAttrHandle.set(primOffset + iPoly, shadingGroupName.c_str());
+                        }
+
+                        // add normals
+                        GA_Primitive* prim = gdp->getPrimitive(primOffset);
+                        GA_Offset vertexOffset = prim->getVertexOffset(0);
+
+                        // normals are always stored per polygon vertex
+                        GA_Attribute* normalAttr = gdp->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
+                        GA_RWHandleV3 normalAttrHandle(normalAttr);
+
+                        const glm::Array<glm::Vector3>& deformedMeshNormals = deformedNormals[iMesh];
+                        if (assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_POLYGON_VERTEX)
+                        {
+                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                            {
+                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                {
+                                    // reverse polygon order
+                                    const glm::Vector3& vtxNormal = deformedMeshNormals[iVertex + polySize - 1 - iPolyVtx];
+                                    normalAttrHandle.set(
+                                        vertexOffset + iVertex + iPolyVtx,
+                                        UT_Vector3F(vtxNormal[0], vtxNormal[1], vtxNormal[2]));
+                                }
+                                iVertex += polySize;
+                            }
+                        }
+                        else
+                        {
+                            uint32_t* polygonNormalIndices = assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_CONTROL_POINT ? assetFileMesh._polygonsVertexIndices : assetFileMesh._polygonsNormalIndices;
+                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                            {
+                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                {
+                                    // reverse polygon order
+                                    uint32_t normalIdx = polygonNormalIndices[iVertex + polySize - 1 - iPolyVtx];
+                                    const glm::Vector3& vtxNormal = deformedMeshNormals[normalIdx];
+                                    normalAttrHandle.set(
+                                        vertexOffset + iVertex + iPolyVtx,
+                                        UT_Vector3F(vtxNormal[0], vtxNormal[1], vtxNormal[2]));
+                                }
+                                iVertex += polySize;
+                            }
+                        }
+
+                        if (assetFileMesh._uvSetCount > 0)
+                        {
+                            for (size_t iUVSet = 0; iUVSet < assetFileMesh._uvSetCount; ++iUVSet)
+                            {
+                                glm::GlmString attrName = "uv";
+                                if (iUVSet > 0)
+                                {
+                                    attrName += glm::toString(iUVSet + 1);
+                                }
+                                GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                                uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
+                                GA_RWHandleV2 uvAttrHandle(uvAttr);
+                                if (assetFileMesh._uvMode == glm::crowdio::GLM_UV_PER_CONTROL_POINT)
+                                {
+                                    // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                    // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                    // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            uint32_t uvIndex = assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx];
+                                            uvAttrHandle.set(
+                                                vertexOffset + iVertex + iPolyVtx,
+                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                                else
+                                {
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            uint32_t uvIndex = assetFileMesh._polygonsUVIndices[iVertex + polySize - 1 - iPolyVtx];
+                                            uvAttrHandle.set(
+                                                vertexOffset + iVertex + iPolyVtx,
+                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                            }
+                        }
 
                         //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
