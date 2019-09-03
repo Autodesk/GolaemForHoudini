@@ -45,10 +45,6 @@ HDK_INCLUDES_END
 #include <glmCrowdGcgCharacter.h>
 #include <glmCrowdGcgBaker.h>
 
-#ifndef GLM_GEO_ENGINE_VERSION
-#define GLM_GEO_ENGINE_VERSION 1
-#endif
-
 #include "glmCrowdHoudiniPluginAPI.h"
 
 glm::Mutex _glmCrowdGeoMutex;
@@ -69,6 +65,7 @@ struct GolaemParams
         SOURCE_TERRAIN,
         DEST_TERRAIN,
         ENABLE_LAYOUT,
+        LAYOUT_FILES,
         LAYOUT_FILE,
         OPEN_LAYOUT,
         CURRENT_FRAME,
@@ -78,6 +75,8 @@ struct GolaemParams
         DRAW_PERCENT,
         DISPLAY_MODE,
         GEO_TAG,
+        MATERIAL_PATH,
+        MATERIAL_ASSIGN_MODE,
         END
     };
 };
@@ -89,6 +88,16 @@ struct GolaemDisplayMode
         BOUNDING_BOX,
         SKELETON,
         SKINMESH,
+        END
+    };
+};
+
+struct GolaemMaterialAssignMode
+{
+    enum Value
+    {
+        BY_SURFACE_SHADER,
+        BY_SHADING_GROUP,
         END
     };
 };
@@ -143,11 +152,14 @@ static inline const char* getParamName(GolaemParams::Value value)
     case GolaemParams::ENABLE_LAYOUT:
         return "glmEnableLayout";
         break;
+    case GolaemParams::LAYOUT_FILES:
+        return "glmLayoutFiles";
+        break;
     case GolaemParams::LAYOUT_FILE:
-        return "glmLayoutFile";
+        return "glmLayoutFile#";
         break;
     case GolaemParams::OPEN_LAYOUT:
-        return "glmOpenLayout";
+        return "glmOpenLayout#";
         break;
     case GolaemParams::CURRENT_FRAME:
         return "glmCurrentFrame";
@@ -169,6 +181,12 @@ static inline const char* getParamName(GolaemParams::Value value)
         break;
     case GolaemParams::GEO_TAG:
         return "glmGeoTag";
+        break;
+    case GolaemParams::MATERIAL_PATH:
+        return "glmMaterialPath";
+        break;
+    case GolaemParams::MATERIAL_ASSIGN_MODE:
+        return "glmMAterialAssignMode";
         break;
     case GolaemParams::END:
         break;
@@ -283,11 +301,38 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
     static PRM_SpareData glmTerrainFileOptions(
         PRM_SpareArgs() << PRM_SpareToken(PRM_SpareData::getFileChooserPatternToken(), "*.gtg"));
     static PRM_Name enableLayoutPrm(getParamName(GolaemParams::ENABLE_LAYOUT), "Enable Layout");
-    static PRM_Name layoutFilePrm(getParamName(GolaemParams::LAYOUT_FILE), "Layout File");
+    static PRM_Name layoutFilesPrm(getParamName(GolaemParams::LAYOUT_FILES), "Layout Files");
+    static PRM_Name layoutFilePrm(getParamName(GolaemParams::LAYOUT_FILE), "Layout File #");
     static PRM_SpareData glmLayoutFileOptions(
         PRM_SpareArgs() << PRM_SpareToken(PRM_SpareData::getFileChooserPatternToken(), "*.gscl"));
-
     static PRM_Name openLayoutPrm(getParamName(GolaemParams::OPEN_LAYOUT), "Open");
+
+    static PRM_Template layoutFilesTemplate[] =
+        {
+            PRM_Template(
+                PRM_FILE | PRM_TYPE_JOIN_NEXT,
+                1,
+                &layoutFilePrm,
+                &defaultParam,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onParamChanged,
+                &glmLayoutFileOptions,
+                1,
+                "Simulation Cache Layout file"),
+            PRM_Template(
+                PRM_CALLBACK_NOREFRESH,
+                1,
+                &openLayoutPrm,
+                0,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onOpenLayoutEditor,
+                0,
+                1,
+                "Open in Layout Editor"),
+            PRM_Template() // sentinel
+        };
 
     static PRM_Default currentFrameDefault(0, "@Frame"); // set expression to link to the current frame
     static PRM_Name currentFramePrm(getParamName(GolaemParams::CURRENT_FRAME), "Current Frame");
@@ -329,6 +374,19 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
         };
 
     static PRM_ChoiceList geoTagsChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, geoTagsEnum);
+
+    static PRM_Name materialPathPrm(getParamName(GolaemParams::MATERIAL_PATH), "Material Path");
+    static PRM_Default materialPathDefault(0, "/mat");
+
+    static PRM_Name materialAssignModePrm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), "Material Assign Mode");
+    static PRM_Name materialAssignModeEnum[] =
+        {
+            PRM_Name("surfSh", "By Surface Shader"),
+            PRM_Name("shGroup", "By Shading Group"),
+            PRM_Name(0) // Need a null terminator
+        };
+
+    static PRM_ChoiceList materialAssignModeChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, materialAssignModeEnum);
 
     static PRM_Template myTemplateList[] =
         {
@@ -432,7 +490,7 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 1,
                 "Destination Terrain"),
             PRM_Template(
-                PRM_TOGGLE | PRM_TYPE_JOIN_NEXT | PRM_TYPE_LABEL_NONE,
+                PRM_TOGGLE,
                 1,
                 &enableLayoutPrm,
                 &defaultParam,
@@ -443,27 +501,10 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 1,
                 "Enable Simulation Cache Layout"),
             PRM_Template(
-                PRM_FILE | PRM_TYPE_JOIN_NEXT,
-                1,
-                &layoutFilePrm,
-                &defaultParam,
+                PRM_MULTITYPE_LIST,
+                layoutFilesTemplate,
                 0,
-                0,
-                &SOP_GolaemCacheProxy::onParamChanged,
-                &glmLayoutFileOptions,
-                1,
-                "Simulation Cache Layout file"),
-            PRM_Template(
-                PRM_CALLBACK_NOREFRESH,
-                1,
-                &openLayoutPrm,
-                0,
-                0,
-                0,
-                &SOP_GolaemCacheProxy::onOpenLayoutEditor,
-                0,
-                1,
-                "Open in Layout Editor"),
+                &layoutFilesPrm),
             PRM_Template(
                 PRM_FLT_J,
                 1,
@@ -541,6 +582,28 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
                 0,
                 1,
                 "Geometry Tag"),
+            PRM_Template(
+                PRM_STRING,
+                1,
+                &materialPathPrm,
+                &materialPathDefault,
+                0,
+                0,
+                &SOP_GolaemCacheProxy::onParamChanged,
+                0,
+                1,
+                "Material Path"),
+            PRM_Template(
+                PRM_ORD,
+                1,
+                &materialAssignModePrm,
+                &defaultParam,
+                &materialAssignModeChoice,
+                0,
+                &SOP_GolaemCacheProxy::onParamChanged,
+                0,
+                1,
+                "Material Assignment Mode"),
             PRM_Template() // sentinel
         };
     return myTemplateList;
@@ -563,8 +626,7 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::DEST_TERRAIN), 1);
     changed |= enableParm(getParamName(GolaemParams::ENABLE_LAYOUT), 1);
     bool layoutEnabled = evalInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time);
-    changed |= enableParm(getParamName(GolaemParams::LAYOUT_FILE), layoutEnabled);
-    changed |= enableParm(getParamName(GolaemParams::OPEN_LAYOUT), 1);
+    changed |= enableParm(getParamName(GolaemParams::LAYOUT_FILES), layoutEnabled);
     changed |= enableParm(getParamName(GolaemParams::CURRENT_FRAME), 1);
     changed |= enableParm(getParamName(GolaemParams::START_FRAME), 0);
     changed |= enableParm(getParamName(GolaemParams::END_FRAME), 0);
@@ -573,6 +635,8 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::DISPLAY_MODE), 1);
     GolaemDisplayMode::Value displayMode = (GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
     changed |= enableParm(getParamName(GolaemParams::GEO_TAG), displayMode == GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_PATH), displayMode == GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), displayMode == GolaemDisplayMode::SKINMESH);
     //PRM_Parm* parm = getParmPtr("glmCacheIdx");
     return changed;
 }
@@ -618,17 +682,20 @@ void SOP_GolaemCacheProxy::refreshParameters(
         _factory.clear((glm::crowdio::FactoryClearMode::Value)(glm::crowdio::FactoryClearMode::ALL_HISTORY | glm::crowdio::FactoryClearMode::ALL_MODIFIED));
 
         bool enableLayout = evalInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time) == 1;
-        UT_String layoutFile;
-        evalString(layoutFile, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
-        if (enableLayout && layoutFile.length() > 0)
+        int layoutCount = (int)evalInt(getParamName(GolaemParams::LAYOUT_FILES), 0, time);
+        if (enableLayout && layoutCount > 0)
         {
-			glm::GlmString layoutFiles = layoutFile.buffer();
-			glm::Array<glm::GlmString> layoutFilesParsed;
-			glm::split(layoutFiles, ";", layoutFilesParsed);
-			for (size_t iLayout = 0; iLayout < layoutFilesParsed.size(); iLayout++)
-			{
-				_factory.loadLayoutHistoryFile(iLayout, layoutFilesParsed[iLayout].c_str());
-			}
+            int layoutStartIdx = getParm(getParamName(GolaemParams::LAYOUT_FILES)).getMultiStartOffset();
+            UT_String layoutFile;
+            for (int iLayout = 0; iLayout < layoutCount; ++iLayout)
+            {
+                int layoutIdx = layoutStartIdx + iLayout;
+                evalStringInst(getParamName(GolaemParams::LAYOUT_FILE), &layoutIdx, layoutFile, 0, time);
+                if (layoutFile.length() > 0)
+                {
+                    _factory.loadLayoutHistoryFile(_factory.getLayoutHistoryCount(), layoutFile.c_str());
+                }
+            }
         }
     }
     if (updateTerrain)
@@ -652,12 +719,9 @@ void SOP_GolaemCacheProxy::refreshParameters(
 
     float currentFrame = static_cast<float>(evalFloat(getParamName(GolaemParams::CURRENT_FRAME), 0, time));
 
-    float renderPercent = static_cast<float>(evalFloat(getParamName(GolaemParams::DRAW_PERCENT), 0, time)) * 0.01f;
-
     int startFrame = 0;
     int endFrame = 0;
     bool framesFound = false;
-    int64_t entityCount = 0;
     glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
     for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
     {
@@ -673,38 +737,6 @@ void SOP_GolaemCacheProxy::refreshParameters(
         if (simuData == NULL || frameData == NULL)
         {
             continue;
-        }
-
-        glm::PODArray<int64_t> excludedEntities;
-		glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
-		cachedSimulation.getHistoryRuntimeStructures(historyStructures);
-        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
-        size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
-        for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
-        {
-            int64_t entityId = simuData->_entityIds[iEntity];
-            if (entityId < 0)
-            {
-                // entity was probably killed
-                continue;
-            }
-
-            bool excludedEntity = frameData->_entityEnabled[iEntity] != 1;
-            if (!excludedEntity)
-            {
-                excludedEntity = iEntity >= maxEntities;
-                if (!excludedEntity)
-                {
-                    size_t excludedEntityIdx;
-                    excludedEntity = glm::glmFindIndex(excludedEntities.begin(), excludedEntities.end(), entityId, excludedEntityIdx);
-                }
-            }
-
-            if (excludedEntity)
-            {
-                continue;
-            }
-            ++entityCount;
         }
 
         if (!framesFound)
@@ -726,7 +758,6 @@ void SOP_GolaemCacheProxy::refreshParameters(
 
     setInt(getParamName(GolaemParams::START_FRAME), 0, time, startFrame);
     setInt(getParamName(GolaemParams::END_FRAME), 0, time, endFrame);
-    setInt(getParamName(GolaemParams::ENTITY_COUNT), 0, time, entityCount);
 }
 
 //-----------------------------------------------------------------------------
@@ -773,7 +804,7 @@ void SOP_GolaemCacheProxy::updateCacheLibParams(fpreal time)
     glm::GlmString srcTerrain;
     glm::GlmString dstTerrain;
     bool enableLayout = false;
-    glm::GlmString layoutFile;
+    glm::GlmString layoutFiles;
 
     glm::crowdio::SimulationCacheInformation* cacheInfo = simuCacheLibrary.getCacheInformationByName(cacheLibItem.c_str());
     if (cacheInfo == NULL && simuCacheLibrary.getCacheInformationCount() > 0)
@@ -789,7 +820,8 @@ void SOP_GolaemCacheProxy::updateCacheLibParams(fpreal time)
         srcTerrain = cacheInfo->_srcTerrain;
         dstTerrain = cacheInfo->_destTerrain;
         enableLayout = cacheInfo->_enableLayout;
-        layoutFile = cacheInfo->_layoutFile;
+        layoutFiles = cacheInfo->_layoutFile;
+        layoutFiles.trim(";");
     }
     setString(cfNames.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CROWDFIELD_NAMES), 0, time);
     setString(cacheName.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::CACHE_NAME), 0, time);
@@ -798,7 +830,17 @@ void SOP_GolaemCacheProxy::updateCacheLibParams(fpreal time)
     setString(srcTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::SOURCE_TERRAIN), 0, time);
     setString(dstTerrain.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::DEST_TERRAIN), 0, time);
     setInt(getParamName(GolaemParams::ENABLE_LAYOUT), 0, time, enableLayout ? 1 : 0);
-    setString(layoutFile.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+    int layoutStartIdx = getParm(getParamName(GolaemParams::LAYOUT_FILES)).getMultiStartOffset();
+    glm::Array<glm::GlmString> splitLayoutFiles;
+    glm::split(layoutFiles, ";", splitLayoutFiles);
+    // set the number of layout files
+    setInt(getParamName(GolaemParams::LAYOUT_FILES), 0, time, splitLayoutFiles.size());
+    for (size_t iLayout = 0, layoutCount = splitLayoutFiles.size(); iLayout < layoutCount; ++iLayout)
+    {
+        const glm::GlmString& layoutFile = splitLayoutFiles[iLayout];
+        int layoutIdx = layoutStartIdx + (int)iLayout;
+        setStringInst(layoutFile.c_str(), CH_STRING_LITERAL, getParamName(GolaemParams::LAYOUT_FILE), &layoutIdx, 0, time);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -831,7 +873,9 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
         updateTerrain = true;
         updateCharacterFiles = true;
     }
-    if (paramToken == getParamName(GolaemParams::ENABLE_LAYOUT) || paramToken == getParamName(GolaemParams::LAYOUT_FILE))
+    glm::GlmString layoutFileTokenPrefix = getParamName(GolaemParams::LAYOUT_FILE);
+    layoutFileTokenPrefix.rtrim("#"); // remove the # character
+    if (paramToken == getParamName(GolaemParams::ENABLE_LAYOUT) || paramToken == getParamName(GolaemParams::LAYOUT_FILE) || paramToken.startsWith(layoutFileTokenPrefix.c_str()))
     {
         updateLayout = true;
     }
@@ -853,10 +897,17 @@ int SOP_GolaemCacheProxy::onOpenLayoutEditor(void* data, int /*index*/, fpreal t
     SOP_GolaemCacheProxy* sop = static_cast<SOP_GolaemCacheProxy*>(data);
 
     const UT_StringRef& paramToken = tplate->getNamePtr()->getTokenRef();
-    if (paramToken == getParamName(GolaemParams::OPEN_LAYOUT))
+    glm::GlmString openLayoutTokenPrefix = getParamName(GolaemParams::OPEN_LAYOUT);
+    openLayoutTokenPrefix.rtrim("#"); // remove the # character
+    if (paramToken.startsWith(openLayoutTokenPrefix.c_str()))
     {
+        // get the index
+        int layoutIdx = 0;
+        glm::GlmString indexStr = glm::GlmString(paramToken.c_str()).replace(0, openLayoutTokenPrefix.size(), "");
+        glm::fromString(indexStr, layoutIdx);
+
         UT_String layoutFile;
-        sop->evalString(layoutFile, getParamName(GolaemParams::LAYOUT_FILE), 0, time);
+        sop->evalStringInst(getParamName(GolaemParams::LAYOUT_FILE), &layoutIdx, layoutFile, 0, time);
         glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
         pythonCommand += glm::GlmString("launcher.LayoutEditorWindowMain(");
         if (layoutFile.length() > 0)
@@ -1008,10 +1059,17 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     float renderPercent = static_cast<float>(evalFloat(getParamName(GolaemParams::DRAW_PERCENT), 0, time)) * 0.01f;
     short geoTag = static_cast<short>(evalInt(getParamName(GolaemParams::GEO_TAG), 0, time));
 
+    int64_t entityCount = 0;
+
+    glm::GlmString entityIdAttrName = "glmEntityId";
+
     switch (displayMode)
     {
     case GolaemDisplayMode::BOUNDING_BOX:
     {
+        GEO_PolyCounts polyCounts;
+        UT_IntArray polygonpointnumbers;
+
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
         {
@@ -1030,8 +1088,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-			glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
-			cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+            cachedSimulation.getHistoryRuntimeStructures(historyStructures);
             glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
@@ -1086,6 +1144,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     halfExtents = geoAsset->_halfExtentsYUp;
                 }
 
+                ++entityCount;
+
                 uint16_t entityType = simuData->_entityTypes[iEntity];
 
                 uint16_t boneCount = simuData->_boneCount[entityType];
@@ -1094,26 +1154,283 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 float* rootPos = frameData->_bonePositions[positionOffset];
                 float characterScale = simuData->_scales[iEntity];
                 halfExtents *= characterScale;
-                gdp->cube(
-                    rootPos[0] - halfExtents[0], rootPos[0] + halfExtents[0],
-                    rootPos[1] - halfExtents[1], rootPos[1] + halfExtents[1],
-                    rootPos[2] - halfExtents[2], rootPos[2] + halfExtents[2],
-                    0, 0, 0, 0, 1);
+
+                GA_Offset pointStartOffset = gdp->appendPointBlock(8);
+
+                gdp->setPos3(pointStartOffset,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 1,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 2,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 3,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] - halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 4,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 5,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] + halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 6,
+                             UT_Vector3(
+                                 rootPos[0] + halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                gdp->setPos3(pointStartOffset + 7,
+                             UT_Vector3(
+                                 rootPos[0] - halfExtents[0],
+                                 rootPos[1] + halfExtents[1],
+                                 rootPos[2] - halfExtents[2]));
+
+                polyCounts.clear();
+                polygonpointnumbers.clear();
+                // cube = 6 faces
+                for (size_t iFace = 0; iFace < 6; ++iFace)
+                {
+                    polyCounts.append(4);
+                }
+
+                // face 0
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(3);
+
+                // face 1
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(6);
+                polygonpointnumbers.append(5);
+
+                // face 2
+                polygonpointnumbers.append(2);
+                polygonpointnumbers.append(3);
+                polygonpointnumbers.append(7);
+                polygonpointnumbers.append(6);
+
+                // face 3
+                polygonpointnumbers.append(3);
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(4);
+                polygonpointnumbers.append(7);
+
+                // face 4
+                polygonpointnumbers.append(0);
+                polygonpointnumbers.append(1);
+                polygonpointnumbers.append(5);
+                polygonpointnumbers.append(4);
+
+                // face 5
+                polygonpointnumbers.append(4);
+                polygonpointnumbers.append(5);
+                polygonpointnumbers.append(6);
+                polygonpointnumbers.append(7);
+
+                GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 8, polyCounts, polygonpointnumbers.array(), false);
+
+                GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+                for (size_t iFace = 0; iFace < 6; ++iFace)
+                {
+                    entityIdAttrHandle.set(primOffset + iFace, entityId);
+                }
             }
         }
     }
     break;
     case GolaemDisplayMode::SKELETON:
     {
+        GEO_PolyCounts polyCounts;
+        UT_IntArray polygonpointnumbers;
+
+        glm::Array<glm::PODArray<size_t>> sortedBonesInversePerChar(_factory.getGolaemCharacters().size());
+        for (int iChar = 0, charCount = _factory.getGolaemCharacters().sizeInt(); iChar < charCount; ++iChar)
+        {
+            glm::PODArray<size_t>& sortedBonesInverse = sortedBonesInversePerChar[iChar];
+            const glm::GolaemCharacter* character = _factory.getGolaemCharacter(iChar);
+            if (character == NULL)
+            {
+                continue;
+            }
+            const glm::PODArray<size_t>& sortedBones = character->_converterMapping._skeletonDescription->getSortedBones();
+            sortedBonesInverse.resize(sortedBones.size());
+            for (size_t iBone = 0, boneCount = sortedBones.size(); iBone < boneCount; ++iBone)
+            {
+                sortedBonesInverse[sortedBones[iBone]] = iBone;
+            }
+        }
+        glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
+        for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
+        {
+            const glm::GlmString& cfName = crowdFieldNames[iCf];
+            if (cfName.empty())
+            {
+                continue;
+            }
+            glm::crowdio::CachedSimulation& cachedSimulation = _factory.getCachedSimulation(cacheDir.c_str(), cacheName.c_str(), cfName.c_str());
+            const glm::crowdio::GlmSimulationData* simuData = cachedSimulation.getFinalSimulationData();
+            const glm::crowdio::GlmFrameData* frameData = cachedSimulation.getFinalFrameData(currentFrame, UINT32_MAX, true);
+
+            if (simuData == NULL || frameData == NULL)
+            {
+                continue;
+            }
+
+            glm::PODArray<int64_t> excludedEntities;
+            glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+            cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
+            size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
+            for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
+            {
+                int64_t entityId = simuData->_entityIds[iEntity];
+                if (entityId < 0)
+                {
+                    // entity was probably killed
+                    continue;
+                }
+
+                bool excludedEntity = frameData->_entityEnabled[iEntity] != 1;
+                if (!excludedEntity)
+                {
+                    excludedEntity = iEntity >= maxEntities;
+                    if (!excludedEntity)
+                    {
+                        size_t excludedEntityIdx;
+                        excludedEntity = glm::glmFindIndex(excludedEntities.begin(), excludedEntities.end(), entityId, excludedEntityIdx);
+                    }
+                }
+
+                if (excludedEntity)
+                {
+                    continue;
+                }
+
+                int32_t characterIdx = simuData->_characterIdx[iEntity];
+                const glm::GolaemCharacter* character = _factory.getGolaemCharacter(characterIdx);
+                if (character == NULL)
+                {
+                    GLM_CROWD_TRACE_ERROR_LIMIT("The entity '" << entityId << "' has an invalid character index: '" << characterIdx << "'. Skipping it. Please assign a Rendering Type from the Rendering Attributes panel");
+                    continue;
+                }
+
+                ++entityCount;
+
+                glm::PODArray<size_t>& sortedBonesInverse = sortedBonesInversePerChar[characterIdx];
+
+                uint16_t entityType = simuData->_entityTypes[iEntity];
+
+                uint16_t boneCount = simuData->_boneCount[entityType];
+
+                uint32_t positionOffset = simuData->_iBoneOffsetPerEntityType[entityType] + simuData->_indexInEntityType[iEntity] * boneCount;
+
+                // set the bone positions
+                GA_Offset pointStartOffset = gdp->appendPointBlock(boneCount);
+                for (uint16_t iBone = 0; iBone < boneCount; ++iBone)
+                {
+                    float* bonePos = frameData->_bonePositions[positionOffset + iBone];
+                    gdp->setPos3(pointStartOffset + iBone,
+                                 UT_Vector3(
+                                     bonePos[0],
+                                     bonePos[1],
+                                     bonePos[2]));
+                }
+
+                const glm::PODArray<glm::HierarchicalBone*>& hBones = character->_converterMapping._skeletonDescription->getBones();
+                const glm::PODArray<size_t>& sortedBones = character->_converterMapping._skeletonDescription->getSortedBones();
+
+                for (int iBone = 0, primCount = glm::min(sortedBones.sizeInt(), (int)boneCount); iBone < primCount; ++iBone)
+                {
+                    const glm::HierarchicalBone* hBone = hBones[sortedBones[iBone]];
+                    const glm::HierarchicalBone* hBoneParent = hBone->getFather();
+                    if (hBoneParent == NULL)
+                    {
+                        continue;
+                    }
+                    int parentIdx = hBoneParent->getSpecificBoneIndex();
+                    int parentIdxInCache = (int)sortedBonesInverse[parentIdx];
+
+                    polyCounts.clear();
+                    polygonpointnumbers.clear();
+                    polyCounts.append(2); // polygon size = 2
+                    polygonpointnumbers.append(iBone);
+                    polygonpointnumbers.append(parentIdxInCache);
+
+                    GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 2, polyCounts, polygonpointnumbers.array(), false);
+
+                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                    GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+                    entityIdAttrHandle.set(primOffset, entityId);
+                }
+            }
+        }
     }
     break;
     case GolaemDisplayMode::SKINMESH:
     {
+        UT_String materialPath;
+        evalString(materialPath, getParamName(GolaemParams::MATERIAL_PATH), 0, time);
+
+        GolaemMaterialAssignMode::Value materialAssignMode = (GolaemMaterialAssignMode::Value)evalInt(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), 0, time);
+
         glm::PODArray<glm::crowdio::FurIds> furIds;
         glm::Array<glm::crowdio::FurCache::SP> furCache;
 
         GEO_PolyCounts polyCounts;
         UT_IntArray polygonpointnumbers;
+
+        glm::GlmString meshAttrName = "glmMeshName";
+        glm::GlmString materialAttrName = "shop_materialpath";
+
+        // shading group to surface shader map
+        glm::Array<glm::PODArray<int>> sgToSsPerChar(_factory.getGolaemCharacters().size());
+        for (int iChar = 0, charCount = _factory.getGolaemCharacters().sizeInt(); iChar < charCount; ++iChar)
+        {
+            const glm::GolaemCharacter* character = _factory.getGolaemCharacter(iChar);
+            if (character == NULL)
+            {
+                continue;
+            }
+            glm::PODArray<int>& shadingGroupToSurfaceShader = sgToSsPerChar[iChar];
+            shadingGroupToSurfaceShader.resize(character->_shadingGroups.size(), -1);
+            for (size_t iSg = 0, sgCount = character->_shadingGroups.size(); iSg < sgCount; ++iSg)
+            {
+                const glm::ShadingGroup& shadingGroup = character->_shadingGroups[iSg];
+                for (size_t iSa = 0, saCount = shadingGroup._shaderAssets.size(); iSa < saCount; ++iSa)
+                {
+                    int shaderAssetIdx = shadingGroup._shaderAssets[iSa];
+                    const glm::ShaderAsset& shaderAsset = character->_shaderAssets[shaderAssetIdx];
+                    if (shaderAsset._category.find("surface") != glm::GlmString::npos)
+                    {
+                        shadingGroupToSurfaceShader[iSg] = shaderAssetIdx;
+                        break;
+                    }
+                }
+            }
+        }
 
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
@@ -1133,9 +1450,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
 
             glm::PODArray<int64_t> excludedEntities;
-			glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
-			cachedSimulation.getHistoryRuntimeStructures(historyStructures);
+            glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
+            cachedSimulation.getHistoryRuntimeStructures(historyStructures);
             glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
+
+            const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
+
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
             for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
             {
@@ -1191,7 +1511,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 }
 
                 // compute assets if needed
-                const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getModifiedEntityAssets(_factory.getLayoutHistoryCount()==0 ? 0: _factory.getLayoutHistoryCount() - 1);
+                const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getFinalEntityAssets();
 
                 glm::Array<glm::GlmString> meshAssetNames;
                 glm::PODArray<int> furAssetIds;
@@ -1234,6 +1554,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     GLM_CROWD_TRACE_ERROR("The Character '" << character->_name << "' has no Geometry File for Geometry Tag '" << geoTag << "'! Please add a Geometry File to its Character Node.");
                     continue;
                 }
+
+                ++entityCount;
 
                 glm::FileName assetFileName;
                 assetFileName.set(assetFile);
@@ -1364,7 +1686,91 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 }
 
                 // TODO: see if fur is needed
+
+                // compute shaders
+                const glm::Array<glm::GlmString>& shaderData = shaderDataContainer->data[iEntity];
+
+                glm::GlmMap<size_t, size_t> globalToIntShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToFloatShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToStringShaderAttrIdx;
+                glm::GlmMap<size_t, size_t> globalToVectorShaderAttrIdx;
+
+                glm::PODArray<int> intAttrValues;
+                glm::PODArray<float> floatAttrValues;
+                glm::Array<glm::GlmString> stringAttrValues;
+                glm::Array<glm::Vector3> vectorAttrValues;
+
+                glm::PODArray<int>& shadingGroupToSurfaceShader = sgToSsPerChar[characterIdx];
+
+                for (size_t iShaderAttr = 0, shaderAttrCount = character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
+                {
+                    const glm::GlmString& attrValueStr = shaderData[iShaderAttr];
+                    const glm::ShaderAttribute& shaderAttr = character->_shaderAttributes[iShaderAttr];
+                    switch (shaderAttr._type)
+                    {
+                    case glm::ShaderAttributeType::INT:
+                    {
+
+                        globalToIntShaderAttrIdx[iShaderAttr] = intAttrValues.size();
+                        intAttrValues.addOne();
+                        glm::fromString<int>(attrValueStr, intAttrValues.back());
+                    }
+                    break;
+                    case glm::ShaderAttributeType::FLOAT:
+                    {
+
+                        globalToFloatShaderAttrIdx[iShaderAttr] = floatAttrValues.size();
+                        floatAttrValues.addOne();
+                        glm::fromString<float>(attrValueStr, floatAttrValues.back());
+                    }
+                    break;
+                    case glm::ShaderAttributeType::STRING:
+                    {
+
+                        globalToStringShaderAttrIdx[iShaderAttr] = stringAttrValues.size();
+                        stringAttrValues.addOne();
+                        stringAttrValues.back() = attrValueStr;
+                    }
+                    break;
+                    case glm::ShaderAttributeType::VECTOR:
+                    {
+                        globalToVectorShaderAttrIdx[iShaderAttr] = vectorAttrValues.size();
+                        vectorAttrValues.addOne();
+                        glm::fromString(attrValueStr, vectorAttrValues.back());
+                    }
+                    break;
+                    default:
+                        break;
+                    }
+                }
+
                 size_t meshCount = meshAssetNameIndices.size();
+
+                glm::PODArray<int> meshShadingGroups(meshCount, -1);
+
+                for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                {
+                    const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+                    int& shadingGroupIdx = meshShadingGroups[iMesh];
+
+                    // find shader assets
+                    unsigned int iMaterial = meshAssetMaterialIndices[iMesh];
+                    int meshAssetIdx = character->findMeshAssetIdx(meshName);
+                    if (meshAssetIdx != -1)
+                    {
+                        const glm::MeshAsset& meshAsset = character->_meshAssets[meshAssetIdx];
+                        if (iMaterial < meshAsset._shadingGroups.size())
+                        {
+                            shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
+                        }
+                    }
+
+                    if (shadingGroupIdx == -1)
+                    {
+                        GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
+                    }
+                }
+
                 if (assetFileExtension == "fbx")
                 {
                     // glmComputeCharacterRenderDataFbx
@@ -1376,12 +1782,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     FbxAMatrix geomTransform;
                     bool hasTransform(false);
                     FbxMesh* mesh(NULL);
-                    //FbxLayer* layer(NULL);
-                    //FbxLayerElementUV* uvElement(NULL);
+                    FbxLayer* layer(NULL);
+                    FbxLayerElementUV* uvElement(NULL);
                     FbxLayerElementMaterial* materialElement(NULL);
                     FbxVector4* meshVertices(NULL);
                     FbxVector4 meshVertex;
-                    //FbxVector4 tempNormal;
+                    FbxVector4 tempNormal;
                     //FbxLayerElementTangent* tangentsElement = NULL;
                     //FbxLayerElementBinormal* binormalsElement = NULL;
 
@@ -1456,6 +1862,13 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         mesh = fbxCharacter->getCharacterFBXMesh(iMesh);
 
                         hasTransform = !(nodeTransform == identityMatrix);
+
+                        layer = mesh->GetLayer(0);
+                        bool hasNormals = false;
+                        if (layer != NULL)
+                        {
+                            hasNormals = layer->GetNormals() != NULL;
+                        }
 
                         glm::PODArray<int> vertexMasks;
                         glm::PODArray<int> polygonMasks;
@@ -1550,14 +1963,252 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                 polyCounts.append(polySize);
                                 for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
                                 {
-                                    polygonpointnumbers.append(vertexMasks[mesh->GetPolygonVertex(iFbxPoly, iPolyVertex)]);
+                                    // reverse polygon order
+                                    polygonpointnumbers.append(vertexMasks[mesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)]);
                                 } // iPolyVertex
                             }
                         }
 
-                        GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vertexCount, polyCounts, polygonpointnumbers.array());
+                        GA_Size actualPolyCount = polyCounts.getNumPolygons();
 
-                        gdp->bumpDataIdsForAddOrRemove(true, true, true);
+                        GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vertexCount, polyCounts, polygonpointnumbers.array());
+
+                        GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                        GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+
+                        GA_Attribute* meshAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, meshAttrName.c_str(), 1);
+                        GA_RWHandleS meshAttrHandle(meshAttr);
+
+                        const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_RWHandleS materialAttrHandle(materialAttr);
+
+                        int shadingGroupIdx = meshShadingGroups[iMesh];
+                        glm::GlmString materialName = "";
+                        if (shadingGroupIdx >= 0)
+                        {
+                            const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
+                            materialName = materialPath.c_str();
+                            materialName.rtrim("/");
+                            materialName += "/";
+                            switch (materialAssignMode)
+                            {
+                            case GolaemMaterialAssignMode::BY_SHADING_GROUP:
+                            {
+                                materialName += shGroup._name;
+                            }
+                            break;
+                            case GolaemMaterialAssignMode::BY_SURFACE_SHADER:
+                            {
+                                // get the surface shader
+                                int shaderAssetIdx = shadingGroupToSurfaceShader[shadingGroupIdx];
+                                if (shaderAssetIdx >= 0)
+                                {
+                                    const glm::ShaderAsset& shAsset = character->_shaderAssets[shaderAssetIdx];
+                                    materialName += shAsset._name;
+                                }
+                                else
+                                {
+                                    materialName += "glmDefaultMat";
+                                }
+                            }
+                            break;
+                            default:
+                                break;
+                            }
+                            materialName = glm::replaceString(materialName, ":", "_");
+
+                            // add shading group attributes
+                            for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
+                            {
+                                int shAttrIdx = shGroup._shaderAttributes[iShAttr];
+                                const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                switch (shAttr._type)
+                                {
+                                case glm::ShaderAttributeType::INT:
+                                {
+                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleI attrHandle(attr);
+                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                    int attrValue = intAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::FLOAT:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleF attrHandle(attr);
+                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                    float attrValue = floatAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::STRING:
+                                {
+                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleS attrHandle(attr);
+                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::VECTOR:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    GA_RWHandleV3 attrHandle(attr);
+                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    {
+                                        attrHandle.set(
+                                            primOffset + iPoly,
+                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                    }
+                                }
+                                break;
+                                default:
+                                    break;
+                                }
+                            }
+                        }
+
+                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                        {
+                            entityIdAttrHandle.set(primOffset + iPoly, entityId);
+                            meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
+                            materialAttrHandle.set(primOffset + iPoly, materialName.c_str());
+                        }
+
+                        GA_Primitive* prim = gdp->getPrimitive(primOffset);
+                        GA_Offset vertexOffset = prim->getVertexOffset(0);
+                        if (hasNormals)
+                        {
+                            // add normals
+
+                            // normals are always stored per polygon vertex
+                            GA_Attribute* normalAttr = gdp->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
+                            GA_RWHandleV3 normalAttrHandle(normalAttr);
+
+                            FbxAMatrix globalRotate(identityMatrix);
+                            globalRotate.SetR(nodeTransform.GetR());
+                            bool hasRotate = globalRotate != identityMatrix;
+                            // normals are always stored by polygon vertex
+                            exint actualIndexByPolyVertex = 0;
+                            for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                            {
+                                if (polygonMasks[iFbxPoly])
+                                {
+                                    for (int iPolyVertex = 0, polySize = mesh->GetPolygonSize(iFbxPoly); iPolyVertex < polySize; ++iPolyVertex, ++actualIndexByPolyVertex)
+                                    {
+                                        // reverse polygon order
+                                        mesh->GetPolygonVertexNormal(iFbxPoly, polySize - 1 - iPolyVertex, tempNormal);
+                                        if (hasRotate)
+                                        {
+                                            tempNormal = globalRotate.MultT(tempNormal);
+                                        }
+
+                                        normalAttrHandle.set(
+                                            vertexOffset + actualIndexByPolyVertex,
+                                            UT_Vector3F((float)tempNormal[0], (float)tempNormal[1], (float)tempNormal[2]));
+
+                                    } // iPolyVertex
+                                }
+                            } // iPoly
+                        }
+
+                        // find how many uv layers are available
+                        int uvSetCount = mesh->GetLayerCount(FbxLayerElement::eUV);
+                        uvElement = NULL;
+                        for (int iUVSet = 0; iUVSet < uvSetCount; ++iUVSet)
+                        {
+                            glm::GlmString attrName = "uv";
+                            if (iUVSet > 0)
+                            {
+                                attrName += glm::toString(iUVSet + 1);
+                            }
+                            layer = mesh->GetLayer(mesh->GetLayerTypedIndex((int)iUVSet, FbxLayerElement::eUV));
+                            uvElement = layer->GetUVs();
+                            bool uvsByControlPoint = uvElement->GetMappingMode() == FbxLayerElement::eByControlPoint;
+                            bool uvReferenceDirect = uvElement->GetReferenceMode() == FbxLayerElement::eDirect;
+
+                            GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                            uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
+                            GA_RWHandleV2 uvAttrHandle(uvAttr);
+
+                            if (uvsByControlPoint)
+                            {
+                                // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                int uvIndex;
+                                int actualIndexByPolyVertex = 0;
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    int polySize = mesh->GetPolygonSize(iFbxPoly);
+                                    if (polygonMasks[iFbxPoly])
+                                    {
+                                        for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                        {
+                                            // reverse polygon order
+                                            uvIndex = vertexMasks[mesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)];
+                                            if (!uvReferenceDirect)
+                                            {
+                                                uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                            }
+                                            FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                            uvAttrHandle.set(
+                                                vertexOffset + actualIndexByPolyVertex,
+                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+
+                                            ++actualIndexByPolyVertex;
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                int uvIndex;
+                                int actualIndexByPolyVertex = 0;
+                                int fbxIndexByPolyVertex = 0;
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    int polySize = mesh->GetPolygonSize(iFbxPoly);
+                                    if (polygonMasks[iFbxPoly])
+                                    {
+                                        for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                        {
+                                            // reverse polygon order
+                                            uvIndex = fbxIndexByPolyVertex + polySize - 1 - iPolyVertex;
+                                            if (!uvReferenceDirect)
+                                            {
+                                                uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                            }
+
+                                            FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                            uvAttrHandle.set(
+                                                vertexOffset + actualIndexByPolyVertex,
+                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+
+                                            ++actualIndexByPolyVertex;
+                                        } // iPolyVertex
+                                    }
+                                    fbxIndexByPolyVertex += polySize;
+                                } // iPoly
+                            }
+                        }
+
+                        //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
 
                     // reset character to default pose
@@ -1609,7 +2260,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
                     {
-
                         if (deformedVertices[iMesh].empty() || deformedNormals[iMesh].empty())
                         {
                             continue;
@@ -1645,15 +2295,228 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         {
                             uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
                             polyCounts.append(polySize);
-                            for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx, ++iVertex)
+                            for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
                             {
-                                polygonpointnumbers.append(assetFileMesh._polygonsVertexIndices[iVertex]);
+                                // reverse polygon order
+                                polygonpointnumbers.append(assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx]);
+                            }
+                            iVertex += polySize;
+                        }
+
+                        GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vtxCount, polyCounts, polygonpointnumbers.array());
+
+                        GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                        GA_RWHandleID entityIdAttrHandle(entityIdAttr);
+
+                        GA_Attribute* meshAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, meshAttrName.c_str(), 1);
+                        GA_RWHandleS meshAttrHandle(meshAttr);
+
+                        const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
+
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_RWHandleS materialAttrHandle(materialAttr);
+
+                        int shadingGroupIdx = meshShadingGroups[iMesh];
+                        glm::GlmString materialName = "";
+                        if (shadingGroupIdx >= 0)
+                        {
+                            const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
+                            materialName = materialPath.c_str();
+                            materialName.rtrim("/");
+                            materialName += "/";
+                            switch (materialAssignMode)
+                            {
+                            case GolaemMaterialAssignMode::BY_SHADING_GROUP:
+                            {
+                                materialName += shGroup._name;
+                            }
+                            break;
+                            case GolaemMaterialAssignMode::BY_SURFACE_SHADER:
+                            {
+                                // get the surface shader
+                                int shaderAssetIdx = shadingGroupToSurfaceShader[shadingGroupIdx];
+                                if (shaderAssetIdx >= 0)
+                                {
+                                    const glm::ShaderAsset& shAsset = character->_shaderAssets[shaderAssetIdx];
+                                    materialName += shAsset._name;
+                                }
+                                else
+                                {
+                                    materialName += "glmDefaultMat";
+                                }
+                            }
+                            break;
+                            default:
+                                break;
+                            }
+                            materialName = glm::replaceString(materialName, ":", "_");
+
+                            // add shading group attributes
+                            for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
+                            {
+                                int shAttrIdx = shGroup._shaderAttributes[iShAttr];
+                                const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                switch (shAttr._type)
+                                {
+                                case glm::ShaderAttributeType::INT:
+                                {
+                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleI attrHandle(attr);
+                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                    int attrValue = intAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::FLOAT:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleF attrHandle(attr);
+                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                    float attrValue = floatAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::STRING:
+                                {
+                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    GA_RWHandleS attrHandle(attr);
+                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                    }
+                                }
+                                break;
+                                case glm::ShaderAttributeType::VECTOR:
+                                {
+                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    GA_RWHandleV3 attrHandle(attr);
+                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        attrHandle.set(
+                                            primOffset + iPoly,
+                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                    }
+                                }
+                                break;
+                                default:
+                                    break;
+                                }
                             }
                         }
 
-                        GEO_PrimPoly::buildBlock(gdp, pointStartOffset, vtxCount, polyCounts, polygonpointnumbers.array());
+                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                        {
+                            entityIdAttrHandle.set(primOffset + iPoly, entityId);
+                            meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
+                            materialAttrHandle.set(primOffset + iPoly, materialName.c_str());
+                        }
 
-                        gdp->bumpDataIdsForAddOrRemove(true, true, true);
+                        // add normals
+                        GA_Primitive* prim = gdp->getPrimitive(primOffset);
+                        GA_Offset vertexOffset = prim->getVertexOffset(0);
+
+                        // normals are always stored per polygon vertex
+                        GA_Attribute* normalAttr = gdp->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
+                        GA_RWHandleV3 normalAttrHandle(normalAttr);
+
+                        const glm::Array<glm::Vector3>& deformedMeshNormals = deformedNormals[iMesh];
+                        if (assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_POLYGON_VERTEX)
+                        {
+                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                            {
+                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                {
+                                    // reverse polygon order
+                                    const glm::Vector3& vtxNormal = deformedMeshNormals[iVertex + polySize - 1 - iPolyVtx];
+                                    normalAttrHandle.set(
+                                        vertexOffset + iVertex + iPolyVtx,
+                                        UT_Vector3F(vtxNormal[0], vtxNormal[1], vtxNormal[2]));
+                                }
+                                iVertex += polySize;
+                            }
+                        }
+                        else
+                        {
+                            uint32_t* polygonNormalIndices = assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_CONTROL_POINT ? assetFileMesh._polygonsVertexIndices : assetFileMesh._polygonsNormalIndices;
+                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                            {
+                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                {
+                                    // reverse polygon order
+                                    uint32_t normalIdx = polygonNormalIndices[iVertex + polySize - 1 - iPolyVtx];
+                                    const glm::Vector3& vtxNormal = deformedMeshNormals[normalIdx];
+                                    normalAttrHandle.set(
+                                        vertexOffset + iVertex + iPolyVtx,
+                                        UT_Vector3F(vtxNormal[0], vtxNormal[1], vtxNormal[2]));
+                                }
+                                iVertex += polySize;
+                            }
+                        }
+
+                        if (assetFileMesh._uvSetCount > 0)
+                        {
+                            for (size_t iUVSet = 0; iUVSet < assetFileMesh._uvSetCount; ++iUVSet)
+                            {
+                                glm::GlmString attrName = "uv";
+                                if (iUVSet > 0)
+                                {
+                                    attrName += glm::toString(iUVSet + 1);
+                                }
+                                GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                                uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
+                                GA_RWHandleV2 uvAttrHandle(uvAttr);
+                                if (assetFileMesh._uvMode == glm::crowdio::GLM_UV_PER_CONTROL_POINT)
+                                {
+                                    // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                    // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                    // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            uint32_t uvIndex = assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx];
+                                            uvAttrHandle.set(
+                                                vertexOffset + iVertex + iPolyVtx,
+                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                                else
+                                {
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            uint32_t uvIndex = assetFileMesh._polygonsUVIndices[iVertex + polySize - 1 - iPolyVtx];
+                                            uvAttrHandle.set(
+                                                vertexOffset + iVertex + iPolyVtx,
+                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                            }
+                        }
+
+                        //gdp->bumpDataIdsForAddOrRemove(true, true, true);
                     }
                 }
             }
@@ -1666,6 +2529,10 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
     // free anything not reused
     gdp->destroyStashed();
+
+    _noUpdateLoop = true;
+    setInt(getParamName(GolaemParams::ENTITY_COUNT), 0, time, entityCount);
+    _noUpdateLoop = false;
 
     return error();
 }
