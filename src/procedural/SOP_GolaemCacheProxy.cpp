@@ -75,7 +75,8 @@ struct GolaemParams
         DRAW_PERCENT,
         DISPLAY_MODE,
         GEO_TAG,
-        SHADER_PATH,
+        MATERIAL_PATH,
+        MATERIAL_ASSIGN_MODE,
         END
     };
 };
@@ -87,6 +88,16 @@ struct GolaemDisplayMode
         BOUNDING_BOX,
         SKELETON,
         SKINMESH,
+        END
+    };
+};
+
+struct GolaemMaterialAssignMode
+{
+    enum Value
+    {
+        BY_SURFACE_SHADER,
+        BY_SHADING_GROUP,
         END
     };
 };
@@ -171,8 +182,11 @@ static inline const char* getParamName(GolaemParams::Value value)
     case GolaemParams::GEO_TAG:
         return "glmGeoTag";
         break;
-    case GolaemParams::SHADER_PATH:
-        return "glmShaderPath";
+    case GolaemParams::MATERIAL_PATH:
+        return "glmMaterialPath";
+        break;
+    case GolaemParams::MATERIAL_ASSIGN_MODE:
+        return "glmMAterialAssignMode";
         break;
     case GolaemParams::END:
         break;
@@ -361,8 +375,18 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
 
     static PRM_ChoiceList geoTagsChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, geoTagsEnum);
 
-    static PRM_Name shaderPathPrm(getParamName(GolaemParams::SHADER_PATH), "Shader Path");
-    static PRM_Default shaderPathDefault(0, "/mat");
+    static PRM_Name materialPathPrm(getParamName(GolaemParams::MATERIAL_PATH), "Material Path");
+    static PRM_Default materialPathDefault(0, "/mat");
+
+    static PRM_Name materialAssignModePrm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), "Material Assign Mode");
+    static PRM_Name materialAssignModeEnum[] =
+        {
+            PRM_Name("surfSh", "By Surface Shader"),
+            PRM_Name("shGroup", "By Shading Group"),
+            PRM_Name(0) // Need a null terminator
+        };
+
+    static PRM_ChoiceList materialAssignModeChoice((PRM_ChoiceListType)PRM_CHOICELIST_SINGLE, materialAssignModeEnum);
 
     static PRM_Template myTemplateList[] =
         {
@@ -561,14 +585,25 @@ PRM_Template* SOP_GolaemCacheProxy::buildTemplates()
             PRM_Template(
                 PRM_STRING,
                 1,
-                &shaderPathPrm,
-                &shaderPathDefault,
+                &materialPathPrm,
+                &materialPathDefault,
                 0,
                 0,
                 &SOP_GolaemCacheProxy::onParamChanged,
                 0,
                 1,
-                "Shader Path"),
+                "Material Path"),
+            PRM_Template(
+                PRM_ORD,
+                1,
+                &materialAssignModePrm,
+                &defaultParam,
+                &materialAssignModeChoice,
+                0,
+                &SOP_GolaemCacheProxy::onParamChanged,
+                0,
+                1,
+                "Material Assignment Mode"),
             PRM_Template() // sentinel
         };
     return myTemplateList;
@@ -600,7 +635,8 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::DISPLAY_MODE), 1);
     GolaemDisplayMode::Value displayMode = (GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
     changed |= enableParm(getParamName(GolaemParams::GEO_TAG), displayMode == GolaemDisplayMode::SKINMESH);
-    changed |= enableParm(getParamName(GolaemParams::SHADER_PATH), displayMode == GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_PATH), displayMode == GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), displayMode == GolaemDisplayMode::SKINMESH);
     //PRM_Parm* parm = getParmPtr("glmCacheIdx");
     return changed;
 }
@@ -1022,10 +1058,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     float currentFrame = static_cast<float>(evalFloat(getParamName(GolaemParams::CURRENT_FRAME), 0, time));
     float renderPercent = static_cast<float>(evalFloat(getParamName(GolaemParams::DRAW_PERCENT), 0, time)) * 0.01f;
     short geoTag = static_cast<short>(evalInt(getParamName(GolaemParams::GEO_TAG), 0, time));
-    int64_t entityCount = 0;
 
-    UT_String shaderPath;
-    evalString(shaderPath, getParamName(GolaemParams::SHADER_PATH), 0, time);
+    int64_t entityCount = 0;
 
     glm::GlmString entityIdAttrName = "glmEntityId";
 
@@ -1357,6 +1391,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     break;
     case GolaemDisplayMode::SKINMESH:
     {
+        UT_String materialPath;
+        evalString(materialPath, getParamName(GolaemParams::MATERIAL_PATH), 0, time);
+
+        GolaemMaterialAssignMode::Value materialAssignMode = (GolaemMaterialAssignMode::Value)evalInt(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), 0, time);
+
         glm::PODArray<glm::crowdio::FurIds> furIds;
         glm::Array<glm::crowdio::FurCache::SP> furCache;
 
@@ -1364,7 +1403,34 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         UT_IntArray polygonpointnumbers;
 
         glm::GlmString meshAttrName = "glmMeshName";
-        glm::GlmString shaderAttrName = "shop_materialpath";
+        glm::GlmString materialAttrName = "shop_materialpath";
+
+        // shading group to surface shader map
+        glm::Array<glm::PODArray<int>> sgToSsPerChar(_factory.getGolaemCharacters().size());
+        for (int iChar = 0, charCount = _factory.getGolaemCharacters().sizeInt(); iChar < charCount; ++iChar)
+        {
+            const glm::GolaemCharacter* character = _factory.getGolaemCharacter(iChar);
+            if (character == NULL)
+            {
+                continue;
+            }
+            glm::PODArray<int>& shadingGroupToSurfaceShader = sgToSsPerChar[iChar];
+            shadingGroupToSurfaceShader.resize(character->_shadingGroups.size(), -1);
+            for (size_t iSg = 0, sgCount = character->_shadingGroups.size(); iSg < sgCount; ++iSg)
+            {
+                const glm::ShadingGroup& shadingGroup = character->_shadingGroups[iSg];
+                for (size_t iSa = 0, saCount = shadingGroup._shaderAssets.size(); iSa < saCount; ++iSa)
+                {
+                    int shaderAssetIdx = shadingGroup._shaderAssets[iSa];
+                    const glm::ShaderAsset& shaderAsset = character->_shaderAssets[shaderAssetIdx];
+                    if (shaderAsset._category.find("surface") != glm::GlmString::npos)
+                    {
+                        shadingGroupToSurfaceShader[iSg] = shaderAssetIdx;
+                        break;
+                    }
+                }
+            }
+        }
 
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
@@ -1633,6 +1699,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 glm::PODArray<float> floatAttrValues;
                 glm::Array<glm::GlmString> stringAttrValues;
                 glm::Array<glm::Vector3> vectorAttrValues;
+
+                glm::PODArray<int>& shadingGroupToSurfaceShader = sgToSsPerChar[characterIdx];
 
                 for (size_t iShaderAttr = 0, shaderAttrCount = character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
                 {
@@ -1913,18 +1981,43 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
 
-                        GA_Attribute* shaderAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shaderAttrName.c_str(), 1);
-                        GA_RWHandleS shaderAttrHandle(shaderAttr);
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_RWHandleS materialAttrHandle(materialAttr);
 
                         int shadingGroupIdx = meshShadingGroups[iMesh];
-                        glm::GlmString shadingGroupName = "";
+                        glm::GlmString materialName = "";
                         if (shadingGroupIdx >= 0)
                         {
                             const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
-                            shadingGroupName = shaderPath.c_str();
-                            shadingGroupName.rtrim("/");
-                            shadingGroupName += glm::GlmString("/") + shGroup._name;
-                            shadingGroupName = glm::replaceString(shadingGroupName, ":", "_");
+                            materialName = materialPath.c_str();
+                            materialName.rtrim("/");
+                            materialName += "/";
+                            switch (materialAssignMode)
+                            {
+                            case GolaemMaterialAssignMode::BY_SHADING_GROUP:
+                            {
+                                materialName += shGroup._name;
+                            }
+                            break;
+                            case GolaemMaterialAssignMode::BY_SURFACE_SHADER:
+                            {
+                                // get the surface shader
+                                int shaderAssetIdx = shadingGroupToSurfaceShader[shadingGroupIdx];
+                                if (shaderAssetIdx >= 0)
+                                {
+                                    const glm::ShaderAsset& shAsset = character->_shaderAssets[shaderAssetIdx];
+                                    materialName += shAsset._name;
+                                }
+                                else
+                                {
+                                    materialName += "glmDefaultMat";
+                                }
+                            }
+                            break;
+                            default:
+                                break;
+                            }
+                            materialName = glm::replaceString(materialName, ":", "_");
 
                             // add shading group attributes
                             for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
@@ -1993,7 +2086,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         {
                             entityIdAttrHandle.set(primOffset + iPoly, entityId);
                             meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
-                            shaderAttrHandle.set(primOffset + iPoly, shadingGroupName.c_str());
+                            materialAttrHandle.set(primOffset + iPoly, materialName.c_str());
                         }
 
                         GA_Primitive* prim = gdp->getPrimitive(primOffset);
@@ -2220,18 +2313,43 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
 
-                        GA_Attribute* shaderAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shaderAttrName.c_str(), 1);
-                        GA_RWHandleS shaderAttrHandle(shaderAttr);
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_RWHandleS materialAttrHandle(materialAttr);
 
                         int shadingGroupIdx = meshShadingGroups[iMesh];
-                        glm::GlmString shadingGroupName = "";
+                        glm::GlmString materialName = "";
                         if (shadingGroupIdx >= 0)
                         {
                             const glm::ShadingGroup& shGroup = character->_shadingGroups[shadingGroupIdx];
-                            shadingGroupName = shaderPath.c_str();
-                            shadingGroupName.rtrim("/");
-                            shadingGroupName += glm::GlmString("/") + shGroup._name;
-                            shadingGroupName = glm::replaceString(shadingGroupName, ":", "_");
+                            materialName = materialPath.c_str();
+                            materialName.rtrim("/");
+                            materialName += "/";
+                            switch (materialAssignMode)
+                            {
+                            case GolaemMaterialAssignMode::BY_SHADING_GROUP:
+                            {
+                                materialName += shGroup._name;
+                            }
+                            break;
+                            case GolaemMaterialAssignMode::BY_SURFACE_SHADER:
+                            {
+                                // get the surface shader
+                                int shaderAssetIdx = shadingGroupToSurfaceShader[shadingGroupIdx];
+                                if (shaderAssetIdx >= 0)
+                                {
+                                    const glm::ShaderAsset& shAsset = character->_shaderAssets[shaderAssetIdx];
+                                    materialName += shAsset._name;
+                                }
+                                else
+                                {
+                                    materialName += "glmDefaultMat";
+                                }
+                            }
+                            break;
+                            default:
+                                break;
+                            }
+                            materialName = glm::replaceString(materialName, ":", "_");
 
                             // add shading group attributes
                             for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
@@ -2300,7 +2418,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         {
                             entityIdAttrHandle.set(primOffset + iPoly, entityId);
                             meshAttrHandle.set(primOffset + iPoly, meshName.c_str());
-                            shaderAttrHandle.set(primOffset + iPoly, shadingGroupName.c_str());
+                            materialAttrHandle.set(primOffset + iPoly, materialName.c_str());
                         }
 
                         // add normals
