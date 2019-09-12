@@ -1518,7 +1518,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 glm::PODArray<size_t> meshAssetNameIndices;
                 glm::PODArray<int> meshAssetMaterialIndices, gchaMeshIds;
 
-                glm::PODArray<uint32_t> gcgMeshIndices;
+                glm::PODArray<uint32_t> gcgTransformIndices;
 
                 if (!glm::crowdio::computeMeshNames(character, entityId, entityAssets[iEntity], meshAssetNames, furAssetIds, meshAssetNameIndices, meshAssetMaterialIndices, &gchaMeshIds))
                 {
@@ -1655,7 +1655,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     // get meshes indices in input file, according to asset repartition (array of int indices in input gcg file)
                     glm::PODArray<size_t> notFoundNameMaterialPairs; // index of meshAssetNameIndices & materialIdxPerRenderMesh
-                    if (gcgCharacter->getAssetFileMeshIndicesFromMeshAssociation(meshAssetNames, meshAssetNameIndices, meshAssetMaterialIndices, gcgMeshIndices, &notFoundNameMaterialPairs) == 0)
+                    if (gcgCharacter->getAssetFileMeshIndicesFromMeshAssociation(meshAssetNames, meshAssetNameIndices, meshAssetMaterialIndices, gcgTransformIndices, &notFoundNameMaterialPairs) == 0)
                     {
                         GLM_CROWD_TRACE_ERROR("No Mesh found in Character Geometry File '" << assetFile << "' for Character " << character->_name);
                         continue;
@@ -2237,23 +2237,22 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         time = 0;
                     }
 
-                    float characterScale = simuData->_scales[iEntity];
 
                     glm::crowdio::CrowdGcgBaker& gcgBaker = glm::crowdio::getDefaultGcgBaker();
                     gcgBaker.processCharacter(
                         iEntity,
                         *character,
                         *gcgCharacter,
-                        characterScale,
                         *simuData,
                         *frameData,
                         gchaMeshIds,
-                        gcgMeshIndices,
+                        gcgTransformIndices,
                         deformedVertices,
                         deformedNormals,
                         deformedFurVertices,
                         furIds,
                         furCache,
+						NULL, // will create some inner skinning data, it is only needed when managing instances, so not there
                         idGeometryFileIdx != -1,
                         time,
                         geometryFrameCacheDataPtr);
@@ -2265,14 +2264,15 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                             continue;
                         }
 
-                        if (gcgMeshIndices[iMesh] == static_cast<uint32_t>(-1)) // skip mesh, not found in asset file
+                        if (gcgTransformIndices[iMesh] == static_cast<uint32_t>(-1)) // skip mesh, not found in asset file
                         {
                             continue;
                         }
 
                         // need to duplicate from asset file and copy vertices position / normals :
                         // the meshes used by this entity assets are tagged in meshAssetNameIndices, and reference the names. there is as much GlmFileMesh as names, and as mush renderGeometry->_meshCount as "meshAssetNameIndices", get the proper GlmFileMesh :
-                        glm::crowdio::GlmFileMesh& assetFileMesh = gcgCharacter->getGeometry()._meshes[gcgMeshIndices[iMesh]];
+						glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = gcgCharacter->getGeometry()._transforms[gcgTransformIndices[iMesh]];
+                        glm::crowdio::GlmFileMesh& assetFileMesh = gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                         glm::Array<glm::Vector3>& deformedMeshVertices = deformedVertices[iMesh]; // should match vertexCount
 
