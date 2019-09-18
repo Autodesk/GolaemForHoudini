@@ -2141,9 +2141,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                             bool uvsByControlPoint = uvElement->GetMappingMode() == FbxLayerElement::eByControlPoint;
                             bool uvReferenceDirect = uvElement->GetReferenceMode() == FbxLayerElement::eDirect;
 
-                            GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                            GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 3);
                             uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
-                            GA_RWHandleV2 uvAttrHandle(uvAttr);
+                            GA_RWHandleV3 uvAttrHandle(uvAttr);
 
                             if (uvsByControlPoint)
                             {
@@ -2169,7 +2169,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                             FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
                                             uvAttrHandle.set(
                                                 vertexOffset + actualIndexByPolyVertex,
-                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+                                                UT_Vector3F((float)tempUV[0], (float)tempUV[1], 0));
 
                                             ++actualIndexByPolyVertex;
                                         }
@@ -2198,7 +2198,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                             FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
                                             uvAttrHandle.set(
                                                 vertexOffset + actualIndexByPolyVertex,
-                                                UT_Vector2F((float)tempUV[0], (float)tempUV[1]));
+                                                UT_Vector3F((float)tempUV[0], (float)tempUV[1], 0));
 
                                             ++actualIndexByPolyVertex;
                                         } // iPolyVertex
@@ -2237,7 +2237,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         time = 0;
                     }
 
-
                     glm::crowdio::CrowdGcgBaker& gcgBaker = glm::crowdio::getDefaultGcgBaker();
                     gcgBaker.processCharacter(
                         iEntity,
@@ -2252,7 +2251,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         deformedFurVertices,
                         furIds,
                         furCache,
-						NULL, // will create some inner skinning data, it is only needed when managing instances, so not there
+                        NULL, // will create some inner skinning data, it is only needed when managing instances, so not there
                         idGeometryFileIdx != -1,
                         time,
                         geometryFrameCacheDataPtr);
@@ -2271,7 +2270,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         // need to duplicate from asset file and copy vertices position / normals :
                         // the meshes used by this entity assets are tagged in meshAssetNameIndices, and reference the names. there is as much GlmFileMesh as names, and as mush renderGeometry->_meshCount as "meshAssetNameIndices", get the proper GlmFileMesh :
-						glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = gcgCharacter->getGeometry()._transforms[gcgTransformIndices[iMesh]];
+                        glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = gcgCharacter->getGeometry()._transforms[gcgTransformIndices[iMesh]];
                         glm::crowdio::GlmFileMesh& assetFileMesh = gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                         glm::Array<glm::Vector3>& deformedMeshVertices = deformedVertices[iMesh]; // should match vertexCount
@@ -2474,9 +2473,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                 {
                                     attrName += glm::toString(iUVSet + 1);
                                 }
-                                GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 2);
+                                GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 3);
                                 uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
-                                GA_RWHandleV2 uvAttrHandle(uvAttr);
+                                GA_RWHandleV3 uvAttrHandle(uvAttr);
                                 if (assetFileMesh._uvMode == glm::crowdio::GLM_UV_PER_CONTROL_POINT)
                                 {
                                     // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
@@ -2492,7 +2491,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                             uint32_t uvIndex = assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx];
                                             uvAttrHandle.set(
                                                 vertexOffset + iVertex + iPolyVtx,
-                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                                UT_Vector3F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex], 0));
                                         }
                                         iVertex += polySize;
                                     }
@@ -2508,7 +2507,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                                             uint32_t uvIndex = assetFileMesh._polygonsUVIndices[iVertex + polySize - 1 - iPolyVtx];
                                             uvAttrHandle.set(
                                                 vertexOffset + iVertex + iPolyVtx,
-                                                UT_Vector2F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex]));
+                                                UT_Vector3F(assetFileMesh._us[iUVSet][uvIndex], assetFileMesh._vs[iUVSet][uvIndex], 0));
                                         }
                                         iVertex += polySize;
                                     }
