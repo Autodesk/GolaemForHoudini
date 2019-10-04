@@ -714,6 +714,10 @@ void SOP_GolaemCacheProxy::refreshParameters(
         {
             destTerrain = glm::crowdio::crowdTerrain::loadTerrainAsset(destTerrainFile.c_str());
         }
+        if (destTerrain == NULL)
+        {
+            destTerrain = sourceTerrain;
+        }
         _factory.setTerrainMeshes(sourceTerrain, destTerrain);
     }
 
