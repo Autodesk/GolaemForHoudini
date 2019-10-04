@@ -1537,6 +1537,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     continue;
                 }
 
+                ++entityCount;
+
                 // compute shaders
                 const glm::Array<glm::GlmString>& shaderData = shaderDataContainer->data[_inputData._entityIndex];
 
