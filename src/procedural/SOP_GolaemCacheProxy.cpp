@@ -27,6 +27,7 @@ HDK_INCLUDES_START
 #include <PY/PY_Python.h>
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_shelves.h>
+#include <UT/UT_VarEncode.h>
 
 HDK_INCLUDES_END
 
@@ -1407,7 +1408,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         UT_IntArray polygonpointnumbers;
 
         glm::GlmString meshAttrName = "glmMeshName";
-        glm::GlmString materialAttrName = "shop_materialpath";
 
         // shading group to surface shader map
         glm::Array<glm::PODArray<int>> sgToSsPerChar(_factory.getGolaemCharacters().size());
@@ -1985,7 +1985,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
 
-                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, GEO_STD_ATTRIB_MATERIAL, 1);
                         GA_RWHandleS materialAttrHandle(materialAttr);
 
                         int shadingGroupIdx = meshShadingGroups[iMesh];
@@ -2028,60 +2028,78 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                             {
                                 int shAttrIdx = shGroup._shaderAttributes[iShAttr];
                                 const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                UT_StringHolder attrName = UT_VarEncode::encode(shAttr._name.c_str());
+                                GA_Attribute* attr = NULL;
                                 switch (shAttr._type)
                                 {
                                 case glm::ShaderAttributeType::INT:
                                 {
-                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleI attrHandle(attr);
-                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
-                                    int attrValue = intAttrValues[attrValueIdx];
-                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                        size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                        int attrValue = intAttrValues[attrValueIdx];
+                                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue);
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::FLOAT:
                                 {
-                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleF attrHandle(attr);
-                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
-                                    float attrValue = floatAttrValues[attrValueIdx];
-                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                        size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                        float attrValue = floatAttrValues[attrValueIdx];
+                                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue);
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::STRING:
                                 {
-                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleS attrHandle(attr);
-                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
-                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
-                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                        size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                        const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::VECTOR:
                                 {
-                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, attrName, 3);
                                     GA_RWHandleV3 attrHandle(attr);
-                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
-                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
-                                    for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(
-                                            primOffset + iPoly,
-                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                        size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                        const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                        for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
+                                        {
+                                            attrHandle.set(
+                                                primOffset + iPoly,
+                                                UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                        }
                                     }
                                 }
                                 break;
                                 default:
                                     break;
+                                }
+                                if (attr == NULL)
+                                {
+                                    GLM_CROWD_TRACE_WARNING_LIMIT("Failed to add shader attribute '" << shAttr._name << "'");
                                 }
                             }
                         }
@@ -2135,11 +2153,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         uvElement = NULL;
                         for (int iUVSet = 0; iUVSet < uvSetCount; ++iUVSet)
                         {
-                            glm::GlmString attrName = "uv";
-                            if (iUVSet > 0)
-                            {
-                                attrName += glm::toString(iUVSet + 1);
-                            }
+                            glm::GlmString attrName = gdp->getStdAttributeName(GEO_ATTRIBUTE_TEXTURE, iUVSet + 1).c_str();
                             layer = mesh->GetLayer(mesh->GetLayerTypedIndex((int)iUVSet, FbxLayerElement::eUV));
                             uvElement = layer->GetUVs();
                             bool uvsByControlPoint = uvElement->GetMappingMode() == FbxLayerElement::eByControlPoint;
@@ -2316,7 +2330,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                         const glm::GlmString& meshName = meshAssetNames[meshAssetNameIndices[iMesh]];
 
-                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, materialAttrName.c_str(), 1);
+                        GA_Attribute* materialAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, GEO_STD_ATTRIB_MATERIAL, 1);
                         GA_RWHandleS materialAttrHandle(materialAttr);
 
                         int shadingGroupIdx = meshShadingGroups[iMesh];
@@ -2359,60 +2373,78 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                             {
                                 int shAttrIdx = shGroup._shaderAttributes[iShAttr];
                                 const glm::ShaderAttribute& shAttr = character->_shaderAttributes[shAttrIdx];
+                                UT_StringHolder attrName = UT_VarEncode::encode(shAttr._name.c_str());
+                                GA_Attribute* attr = NULL;
                                 switch (shAttr._type)
                                 {
                                 case glm::ShaderAttributeType::INT:
                                 {
-                                    GA_Attribute* attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addIntTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleI attrHandle(attr);
-                                    size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
-                                    int attrValue = intAttrValues[attrValueIdx];
-                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                        size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                        int attrValue = intAttrValues[attrValueIdx];
+                                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue);
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::FLOAT:
                                 {
-                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleF attrHandle(attr);
-                                    size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
-                                    float attrValue = floatAttrValues[attrValueIdx];
-                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue);
+                                        size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                        float attrValue = floatAttrValues[attrValueIdx];
+                                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue);
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::STRING:
                                 {
-                                    GA_Attribute* attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 1);
+                                    attr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, attrName, 1);
                                     GA_RWHandleS attrHandle(attr);
-                                    size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
-                                    const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
-                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                        size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                        const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                        {
+                                            attrHandle.set(primOffset + iPoly, attrValue.c_str());
+                                        }
                                     }
                                 }
                                 break;
                                 case glm::ShaderAttributeType::VECTOR:
                                 {
-                                    GA_Attribute* attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, shAttr._name.c_str(), 3);
+                                    attr = gdp->addFloatTuple(GA_ATTRIB_PRIMITIVE, attrName, 3);
                                     GA_RWHandleV3 attrHandle(attr);
-                                    size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
-                                    const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
-                                    for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    if (attrHandle.isValid())
                                     {
-                                        attrHandle.set(
-                                            primOffset + iPoly,
-                                            UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                        size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                        const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                        for (uint32_t iPoly = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                        {
+                                            attrHandle.set(
+                                                primOffset + iPoly,
+                                                UT_Vector3F(attrValue[0], attrValue[1], attrValue[2]));
+                                        }
                                     }
                                 }
                                 break;
                                 default:
                                     break;
+                                }
+                                if (attr == NULL)
+                                {
+                                    GLM_CROWD_TRACE_WARNING_LIMIT("Failed to add shader attribute '" << shAttr._name << "'");
                                 }
                             }
                         }
@@ -2472,11 +2504,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                         {
                             for (size_t iUVSet = 0; iUVSet < assetFileMesh._uvSetCount; ++iUVSet)
                             {
-                                glm::GlmString attrName = "uv";
-                                if (iUVSet > 0)
-                                {
-                                    attrName += glm::toString(iUVSet + 1);
-                                }
+                                glm::GlmString attrName = gdp->getStdAttributeName(GEO_ATTRIBUTE_TEXTURE, (int)iUVSet + 1).c_str();
                                 GA_Attribute* uvAttr = gdp->addFloatTuple(GA_ATTRIB_VERTEX, attrName.c_str(), 3);
                                 uvAttr->setTypeInfo(GA_TypeInfo::GA_TYPE_TEXTURE_COORD);
                                 GA_RWHandleV3 uvAttrHandle(uvAttr);
