@@ -19,14 +19,17 @@ HDK_INCLUDES_START
 #include <PRM/PRM_SpareData.h>
 #include <PRM/PRM_ChoiceList.h>
 #include <PRM/PRM_Range.h>
-#include <GEO/GEO_PolyCounts.h>
-#include <GEO/GEO_PrimPoly.h>
 #include <CH/CH_Manager.h>
 #include <UT/UT_Exit.h>
 #include <UT/UT_DirUtil.h>
 #include <PY/PY_Python.h>
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_shelves.h>
+#include <GU/GU_PackedFactory.h>
+#include <GU/GU_PrimPacked.h>
+
+#include <GEO/GEO_PolyCounts.h> // TODO: cleanup
+#include <GEO/GEO_PrimPoly.h>   // TODO: cleanup
 
 HDK_INCLUDES_END
 
@@ -47,7 +50,7 @@ HDK_INCLUDES_END
 
 #include "glmCrowdHoudiniPluginAPI.h"
 
-glm::Mutex _glmCrowdGeoMutex;
+#include "GU_PackedGolaemEntity.h"
 
 //-----------------------------------------------------------------------------
 
@@ -77,17 +80,6 @@ struct GolaemParams
         GEO_TAG,
         MATERIAL_PATH,
         MATERIAL_ASSIGN_MODE,
-        END
-    };
-};
-
-struct GolaemDisplayMode
-{
-    enum Value
-    {
-        BOUNDING_BOX,
-        SKELETON,
-        SKINMESH,
         END
     };
 };
@@ -202,6 +194,7 @@ class SOP_GolaemCacheProxy : public SOP_Node
 private:
     bool _needsRefresh;
     bool _noUpdateLoop;
+    bool _clearBakedGeo;
 
     glm::crowdio::SimulationCacheFactory _factory;
 
@@ -236,7 +229,8 @@ private:
         bool updateCache = true,
         bool updateLayout = true,
         bool updateTerrain = true,
-        bool updateCharacterFiles = true);
+        bool updateCharacterFiles = true,
+        bool updateDisplayMode = true);
 
     void updateCacheLibParams(fpreal time);
 };
@@ -637,10 +631,10 @@ bool SOP_GolaemCacheProxy::updateParmsFlags()
     changed |= enableParm(getParamName(GolaemParams::ENTITY_COUNT), 0);
     changed |= enableParm(getParamName(GolaemParams::DRAW_PERCENT), 1);
     changed |= enableParm(getParamName(GolaemParams::DISPLAY_MODE), 1);
-    GolaemDisplayMode::Value displayMode = (GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
-    changed |= enableParm(getParamName(GolaemParams::GEO_TAG), displayMode == GolaemDisplayMode::SKINMESH);
-    changed |= enableParm(getParamName(GolaemParams::MATERIAL_PATH), displayMode == GolaemDisplayMode::SKINMESH);
-    changed |= enableParm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), displayMode == GolaemDisplayMode::SKINMESH);
+    glm::GolaemDisplayMode::Value displayMode = (glm::GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
+    changed |= enableParm(getParamName(GolaemParams::GEO_TAG), displayMode == glm::GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_PATH), displayMode == glm::GolaemDisplayMode::SKINMESH);
+    changed |= enableParm(getParamName(GolaemParams::MATERIAL_ASSIGN_MODE), displayMode == glm::GolaemDisplayMode::SKINMESH);
     //PRM_Parm* parm = getParmPtr("glmCacheIdx");
     return changed;
 }
@@ -651,7 +645,8 @@ void SOP_GolaemCacheProxy::refreshParameters(
     bool updateCache,
     bool updateLayout,
     bool updateTerrain,
-    bool updateCharacterFiles)
+    bool updateCharacterFiles,
+    bool updateDisplayMode)
 {
     if (_needsRefresh)
     {
@@ -660,6 +655,7 @@ void SOP_GolaemCacheProxy::refreshParameters(
         updateLayout = true;
         updateTerrain = true;
         updateCharacterFiles = true;
+        updateDisplayMode = true;
         _needsRefresh = false;
     }
 
@@ -701,6 +697,10 @@ void SOP_GolaemCacheProxy::refreshParameters(
                 }
             }
         }
+    }
+    if (updateCache || updateCharacterFiles || updateLayout || updateDisplayMode)
+    {
+        _clearBakedGeo = true;
     }
     if (updateTerrain)
     {
@@ -865,6 +865,7 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     bool updateLayout = false;
     bool updateTerrain = false;
     bool updateCharacterFiles = false;
+    bool updateDisplayMode = false;
     if (paramToken == getParamName(GolaemParams::CACHELIB_FILE) || paramToken == getParamName(GolaemParams::CACHELIB_ITEM))
     {
         updateCache = true;
@@ -895,7 +896,11 @@ int SOP_GolaemCacheProxy::onParamChanged(void* data, int /*index*/, fpreal time,
     {
         updateCharacterFiles = true;
     }
-    sop->refreshParameters(time, updateCache, updateLayout, updateTerrain, updateCharacterFiles);
+    if (paramToken == getParamName(GolaemParams::DISPLAY_MODE))
+    {
+        updateDisplayMode = true;
+    }
+    sop->refreshParameters(time, updateCache, updateLayout, updateTerrain, updateCharacterFiles, updateDisplayMode);
     return 1;
 }
 
@@ -933,6 +938,7 @@ SOP_GolaemCacheProxy::SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP
     : SOP_Node(net, name, op)
     , _needsRefresh(true)
     , _noUpdateLoop(false)
+    , _clearBakedGeo(false)
 {
     //mySopFlags.setManagesDataIDs(true);
     _inputData._enableLOD = false;
@@ -1035,6 +1041,13 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     PYrunPythonStatements(pythonCommand.c_str());
 }
 
+/// Register new geometry primitive
+//-----------------------------------------------------------------------------
+void GLM_CROWDHOUDINI_API newGeometryPrim(GA_PrimitiveFactory* factory)
+{
+    glm::GU_PackedGolaemEntity::install(factory);
+}
+
 //-----------------------------------------------------------------------------
 OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 {
@@ -1045,13 +1058,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     }
 
     int isRender = isCookingRender();
-
-    // Erase our gdp but keep it around for reuse
-    // This is the same as clearAndDestroy() in terms of the result
-    // but keeps a list of all the primitives around so that
-    // if you immediately recreate the same thing it can be done
-    // very fast.
-    gdp->stashAll();
 
     fpreal time = context.getTime();
     if (_needsRefresh)
@@ -1066,11 +1072,22 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     UT_String cfNames;
     evalString(cfNames, getParamName(GolaemParams::CROWDFIELD_NAMES), 0, time);
 
-    GolaemDisplayMode::Value displayMode = (GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
+    glm::GolaemDisplayMode::Value displayMode = (glm::GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
     if (isRender)
     {
+        if (displayMode != glm::GolaemDisplayMode::SKINMESH)
+        {
+            _clearBakedGeo = true;
+        }
         // always render skinmeshes
-        displayMode = GolaemDisplayMode::SKINMESH;
+        displayMode = glm::GolaemDisplayMode::SKINMESH;
+    }
+
+    if (_clearBakedGeo)
+    {
+        // clean all baked entities
+        gdp->clearAndDestroy();
+        _clearBakedGeo = false;
     }
 
     float currentFrame = static_cast<float>(evalFloat(getParamName(GolaemParams::CURRENT_FRAME), 0, time));
@@ -1079,14 +1096,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
     int64_t entityCount = 0;
 
-    glm::GlmString entityIdAttrName = "glmEntityId";
-
     switch (displayMode)
     {
-    case GolaemDisplayMode::BOUNDING_BOX:
+    case glm::GolaemDisplayMode::BOUNDING_BOX:
     {
-        GEO_PolyCounts polyCounts;
-        UT_IntArray polygonpointnumbers;
+        GA_Size primitiveIndex = 0;
+        GA_Size primCount = gdp->getNumPrimitives();
 
         glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
         for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
@@ -1110,8 +1125,24 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             cachedSimulation.getHistoryRuntimeStructures(historyStructures);
             glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
             size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
-            for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity)
+            for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity, ++primitiveIndex)
             {
+                glm::GU_PackedGolaemEntity* packedEntity = NULL;
+
+                GA_Primitive* prim = NULL;
+                if (primitiveIndex < primCount)
+                {
+                    prim = gdp->getPrimitiveByIndex(primitiveIndex);
+                }
+                if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
+                {
+                    packedEntity = static_cast<glm::GU_PackedGolaemEntity*>((static_cast<GU_PrimPacked*>(prim))->implementation());
+                }
+                else
+                {
+                    packedEntity = glm::GU_PackedGolaemEntity::build(gdp);
+                }
+
                 int64_t entityId = simuData->_entityIds[iEntity];
                 if (entityId < 0)
                 {
@@ -1173,113 +1204,16 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 float characterScale = simuData->_scales[iEntity];
                 halfExtents *= characterScale;
 
-                GA_Offset pointStartOffset = gdp->appendPointBlock(8);
-
-                gdp->setPos3(pointStartOffset,
-                             UT_Vector3(
-                                 rootPos[0] - halfExtents[0],
-                                 rootPos[1] - halfExtents[1],
-                                 rootPos[2] + halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 1,
-                             UT_Vector3(
-                                 rootPos[0] + halfExtents[0],
-                                 rootPos[1] - halfExtents[1],
-                                 rootPos[2] + halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 2,
-                             UT_Vector3(
-                                 rootPos[0] + halfExtents[0],
-                                 rootPos[1] - halfExtents[1],
-                                 rootPos[2] - halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 3,
-                             UT_Vector3(
-                                 rootPos[0] - halfExtents[0],
-                                 rootPos[1] - halfExtents[1],
-                                 rootPos[2] - halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 4,
-                             UT_Vector3(
-                                 rootPos[0] - halfExtents[0],
-                                 rootPos[1] + halfExtents[1],
-                                 rootPos[2] + halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 5,
-                             UT_Vector3(
-                                 rootPos[0] + halfExtents[0],
-                                 rootPos[1] + halfExtents[1],
-                                 rootPos[2] + halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 6,
-                             UT_Vector3(
-                                 rootPos[0] + halfExtents[0],
-                                 rootPos[1] + halfExtents[1],
-                                 rootPos[2] - halfExtents[2]));
-
-                gdp->setPos3(pointStartOffset + 7,
-                             UT_Vector3(
-                                 rootPos[0] - halfExtents[0],
-                                 rootPos[1] + halfExtents[1],
-                                 rootPos[2] - halfExtents[2]));
-
-                polyCounts.clear();
-                polygonpointnumbers.clear();
-                // cube = 6 faces
-                for (size_t iFace = 0; iFace < 6; ++iFace)
-                {
-                    polyCounts.append(4);
-                }
-
-                // face 0
-                polygonpointnumbers.append(0);
-                polygonpointnumbers.append(1);
-                polygonpointnumbers.append(2);
-                polygonpointnumbers.append(3);
-
-                // face 1
-                polygonpointnumbers.append(1);
-                polygonpointnumbers.append(2);
-                polygonpointnumbers.append(6);
-                polygonpointnumbers.append(5);
-
-                // face 2
-                polygonpointnumbers.append(2);
-                polygonpointnumbers.append(3);
-                polygonpointnumbers.append(7);
-                polygonpointnumbers.append(6);
-
-                // face 3
-                polygonpointnumbers.append(3);
-                polygonpointnumbers.append(0);
-                polygonpointnumbers.append(4);
-                polygonpointnumbers.append(7);
-
-                // face 4
-                polygonpointnumbers.append(0);
-                polygonpointnumbers.append(1);
-                polygonpointnumbers.append(5);
-                polygonpointnumbers.append(4);
-
-                // face 5
-                polygonpointnumbers.append(4);
-                polygonpointnumbers.append(5);
-                polygonpointnumbers.append(6);
-                polygonpointnumbers.append(7);
-
-                GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 8, polyCounts, polygonpointnumbers.array(), false);
-
-                GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
-                GA_RWHandleID entityIdAttrHandle(entityIdAttr);
-                for (size_t iFace = 0; iFace < 6; ++iFace)
-                {
-                    entityIdAttrHandle.set(primOffset + iFace, entityId);
-                }
+                packedEntity->_rootPos.setValues(rootPos);
+                packedEntity->_halfExtents = halfExtents;
+                packedEntity->_entityId = entityId;
+                packedEntity->_updateGeo = true;
+                packedEntity->_displayMode = displayMode;
             }
         }
     }
     break;
-    case GolaemDisplayMode::SKELETON:
+    case glm::GolaemDisplayMode::SKELETON:
     {
         GEO_PolyCounts polyCounts;
         UT_IntArray polygonpointnumbers;
@@ -1399,7 +1333,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                     GA_Offset primOffset = GEO_PrimPoly::buildBlock(gdp, pointStartOffset, 2, polyCounts, polygonpointnumbers.array(), false);
 
-                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, "glmEntityId", 1);
                     GA_RWHandleID entityIdAttrHandle(entityIdAttr);
                     entityIdAttrHandle.set(primOffset, entityId);
                 }
@@ -1407,7 +1341,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         }
     }
     break;
-    case GolaemDisplayMode::SKINMESH:
+    case glm::GolaemDisplayMode::SKINMESH:
     {
         UT_String materialPath;
         evalString(materialPath, getParamName(GolaemParams::MATERIAL_PATH), 0, time);
@@ -1960,7 +1894,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                     }
 
                     GA_Size actualPolyCount = polyCounts.getNumPolygons();
-                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, entityIdAttrName.c_str(), 1);
+                    GA_Attribute* entityIdAttr = gdp->addTuple(GA_STORE_INT64, GA_ATTRIB_PRIMITIVE, "glmEntityId", 1);
                     GA_RWHandleID entityIdAttrHandle(entityIdAttr);
 
                     GA_Attribute* meshAttr = gdp->addStringTuple(GA_ATTRIB_PRIMITIVE, meshAttrName.c_str(), 1);
@@ -2081,9 +2015,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     default:
         break;
     }
-
-    // free anything not reused
-    gdp->destroyStashed();
 
     _noUpdateLoop = true;
     setInt(getParamName(GolaemParams::ENTITY_COUNT), 0, time, entityCount);
