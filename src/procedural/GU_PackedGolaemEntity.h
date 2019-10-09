@@ -16,9 +16,13 @@ HDK_INCLUDES_END
 
 #include <glmVector3.h>
 #include <glmString.h>
+#include <glmRenderGeometry.h>
 
 namespace glm
 {
+    class GolaemCharacter;
+    struct ShaderAssetDataContainer;
+
     struct GolaemDisplayMode
     {
         enum Value
@@ -30,19 +34,38 @@ namespace glm
         };
     };
 
+    struct GolaemMaterialAssignMode
+    {
+        enum Value
+        {
+            BY_SURFACE_SHADER,
+            BY_SHADING_GROUP,
+            END
+        };
+    };
+
     class GU_PackedGolaemEntity : public GU_PackedImpl
     {
     public:
-        mutable GU_DetailHandle _detail;
-
         glm::Vector3 _rootPos;
         glm::Vector3 _halfExtents;
-        int64_t _entityId;
+        glm::crowdio::InputEntityGeoData _inputData; // for geometry generation
+        const glm::GolaemCharacter* _character;
+        glm::PODArray<size_t>* _sortedBonesInverse;
+        const glm::ShaderAssetDataContainer* _shaderDataContainer;
+        glm::PODArray<int>* _shadingGroupToSurfaceShader;
+
+        mutable uint32_t _bonePositionOffset; // computed when needed
+
+        GolaemDisplayMode::Value _displayMode;
+        GolaemMaterialAssignMode::Value _materialAssignMode;
+        glm::GlmString _materialPath;
 
         mutable bool _updateGeo;
-        mutable GA_Offset _pointStartOffset;
-        mutable GA_Offset _primOffset;
-        GolaemDisplayMode::Value _displayMode;
+        mutable glm::PODArray<GA_Offset> _pointStartOffsets;
+        mutable glm::PODArray<GA_Offset> _vertexOffsets; // for geometry generation
+
+        mutable GU_DetailHandle _detail;
 
     private:
         static GA_PrimitiveTypeId _typeId;
@@ -50,6 +73,8 @@ namespace glm
     public:
         GU_PackedGolaemEntity();
         GU_PackedGolaemEntity(const GU_PackedGolaemEntity& src);
+        GU_PackedGolaemEntity& operator=(const GU_PackedGolaemEntity& src);
+
         virtual ~GU_PackedGolaemEntity();
 
         static GU_PackedGolaemEntity* build(GU_Detail* gdp);
@@ -84,5 +109,7 @@ namespace glm
 
     private:
         void clearGeo();
+
+        void updateFrom(GU_PrimPacked* prim, const UT_Options& options);
     };
 } // namespace glm
