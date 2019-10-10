@@ -5,6 +5,7 @@
 ***************************************************************************/
 
 #include "GU_PackedGolaemEntity.h"
+#include "GT_PackedGolaemEntity.h"
 
 HDK_INCLUDES_START
 
@@ -15,15 +16,21 @@ HDK_INCLUDES_START
 #include <UT/UT_MemoryCounter.h>
 #include <FS/UT_DSO.h>
 #include <UT/UT_VarEncode.h>
+#include <GT/GT_PrimPolygonMesh.h>
+#include <GT/GT_PrimCollect.h>
+#include <GT/GT_PrimCurveMesh.h>
+#include <GT/GT_DAConstantValue.h>
+#include <GT/GT_PrimPointMesh.h>
+#include <GT/GT_DAIndexedString.h>
 
 HDK_INCLUDES_END
 
-#include "glmLog.h"
-#include "glmSimulationData.h"
-#include "glmFrameData.h"
-#include "glmHierarchicalBone.h"
-#include "glmGolaemCharacter.h"
-#include "glmAssetManagementUtils.h"
+#include <glmLog.h>
+#include <glmSimulationData.h>
+#include <glmFrameData.h>
+#include <glmHierarchicalBone.h>
+#include <glmGolaemCharacter.h>
+#include <glmAssetManagementUtils.h>
 
 #include <glmCrowdFBXCharacter.h>
 #include <glmCrowdGcgStorage.h>
@@ -86,8 +93,8 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     GU_PackedGolaemEntity::GU_PackedGolaemEntity()
-        : _rootPos()
-        , _halfExtents()
+        : _rootPos(0, 0, 0)
+        , _halfExtents(0, 0, 0)
         , _inputData()
         , _character(NULL)
         , _sortedBonesInverse(NULL)
@@ -97,6 +104,7 @@ namespace glm
         , _materialAssignMode(GolaemMaterialAssignMode::END)
         , _materialPath()
         , _updateGeo(false)
+        , _updateViewport(false)
     {
         GU_Detail* detailPtr = new GU_Detail();
         _detail.allocateAndSet(detailPtr, true);
@@ -177,7 +185,7 @@ namespace glm
         if (theGolaemFactory->isRegistered())
         {
             _typeId = theGolaemFactory->typeDef().getId();
-            //GT_GEOPackedSphere::registerPrimitive(_typeId);
+            GT_PackedGolaemEntity::registerPrimitive(_typeId);
         }
         else
         {
@@ -329,7 +337,7 @@ namespace glm
         options.setOptionI("frameData", (int64)_inputData._frameDatas[0]);
         options.setOptionF("frame", _inputData._frames[0]);
         GLM_UNREFERENCED(map);
-        return false;
+        return true;
     }
 
     //-----------------------------------------------------------------------------
@@ -383,9 +391,9 @@ namespace glm
     GU_ConstDetailHandle GU_PackedGolaemEntity::getPackedDetail(GU_PackedContext* context) const
     {
         GLM_UNREFERENCED(context);
+        GU_Detail* detailPtr = _detail.gdpNC();
         if (_inputData._entityId != -1)
         {
-            GU_Detail* detailPtr = _detail.gdpNC();
             bool firstCompute = detailPtr->isEmpty();
             glm::crowdio::OutputEntityGeoData outputData; // TODO: see if storage is better
             glm::crowdio::GlmGeometryGenerationStatus geoStatus = glm::crowdio::GIO_SUCCESS;
@@ -600,6 +608,8 @@ namespace glm
 
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
+                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
+                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
                                 FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
 
@@ -1085,6 +1095,8 @@ namespace glm
                             const GA_Offset& vertexOffset = _vertexOffsets[iMesh];
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
+                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
+                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
                                 FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
 
@@ -1200,6 +1212,12 @@ namespace glm
                 _updateGeo = false;
             }
         }
+        else if (!detailPtr->isEmpty())
+        {
+            // reset detail
+            detailPtr = new GU_Detail();
+            _detail.allocateAndSet(detailPtr, true);
+        }
         return _detail;
     }
 
@@ -1220,6 +1238,890 @@ namespace glm
             //UT_MEMORY_DEBUG_LOG("GU_PackedSphere", int64(mem));
             counter.countUnshared(mem);
         }
+    }
+
+    //-----------------------------------------------------------------------------
+    GT_PrimitiveHandle GU_PackedGolaemEntity::computeViewportGeo() const
+    {
+        if (_inputData._entityId != -1)
+        {
+            bool firstCompute = _viewportGeo.get() == NULL;
+            glm::crowdio::OutputEntityGeoData outputData; // TODO: see if storage is better
+            glm::crowdio::GlmGeometryGenerationStatus geoStatus = glm::crowdio::GIO_SUCCESS;
+            if (firstCompute)
+            {
+                GT_Int64Array* entityIds = new GT_Int64Array(1, 1);
+                GT_DataArrayHandle entityIdsHandle(entityIds);
+
+                entityIds->set(_inputData._entityId, 0, 0);
+
+                const glm::crowdio::GlmSimulationData* simuData = _inputData._cachedSimulation->getFinalSimulationData();
+
+                uint16_t entityType = simuData->_entityTypes[_inputData._entityIndex];
+                uint16_t boneCount = simuData->_boneCount[entityType];
+                _bonePositionOffset = simuData->_iBoneOffsetPerEntityType[entityType] + simuData->_indexInEntityType[_inputData._entityIndex] * boneCount;
+
+                switch (_displayMode)
+                {
+                case glm::GolaemDisplayMode::BOUNDING_BOX:
+                {
+                    _sharedAttributes.resize(1);
+                    GT_Int32Array* polyCounts = new GT_Int32Array(6, 1);
+                    GT_DataArrayHandle polyCountsHandle(polyCounts);
+                    // cube = 6 faces
+                    for (GT_Offset iFace = 0; iFace < 6; ++iFace)
+                    {
+                        polyCounts->set(4, iFace);
+                    }
+
+                    GT_Int32Array* polyPointNumbers = new GT_Int32Array(24, 1);
+                    GT_DataArrayHandle polyPointNumbersHandle(polyPointNumbers);
+
+                    // face 0
+                    polyPointNumbers->set(0, 0);
+                    polyPointNumbers->set(1, 1);
+                    polyPointNumbers->set(2, 2);
+                    polyPointNumbers->set(3, 3);
+
+                    // face 1
+                    polyPointNumbers->set(1, 4);
+                    polyPointNumbers->set(5, 5);
+                    polyPointNumbers->set(6, 6);
+                    polyPointNumbers->set(2, 7);
+
+                    // face 2
+                    polyPointNumbers->set(2, 8);
+                    polyPointNumbers->set(6, 9);
+                    polyPointNumbers->set(7, 10);
+                    polyPointNumbers->set(3, 11);
+
+                    // face 3
+                    polyPointNumbers->set(3, 12);
+                    polyPointNumbers->set(7, 13);
+                    polyPointNumbers->set(4, 14);
+                    polyPointNumbers->set(0, 15);
+
+                    // face 4
+                    polyPointNumbers->set(0, 16);
+                    polyPointNumbers->set(4, 17);
+                    polyPointNumbers->set(5, 18);
+                    polyPointNumbers->set(1, 19);
+
+                    // face 5
+                    polyPointNumbers->set(4, 20);
+                    polyPointNumbers->set(7, 21);
+                    polyPointNumbers->set(6, 22);
+                    polyPointNumbers->set(5, 23);
+
+                    // point attributes
+
+                    GT_Real32Array* points = new GT_Real32Array(0, 3, GT_TYPE_POINT);
+                    GT_DataArrayHandle pointsHandle(points);
+                    _sharedAttributes[0] = GT_AttributeList::createAttributeList(GEO_STD_ATTRIB_POSITION, pointsHandle);
+
+                    GT_AttributeListHandle vertexAttr;
+                    GT_AttributeListHandle uniformAttr;
+
+                    GT_AttributeListHandle detailAttr = GT_AttributeList::createAttributeList(getEntityIdAttrName().c_str(), entityIdsHandle);
+
+                    _viewportGeo = new GT_PrimPolygonMesh(polyCountsHandle, polyPointNumbersHandle, _sharedAttributes[0], vertexAttr, uniformAttr, detailAttr);
+                }
+                break;
+                case glm::GolaemDisplayMode::SKELETON:
+                {
+                    _sharedAttributes.resize(1);
+                    const glm::PODArray<size_t>& sortedBones = _character->_converterMapping._skeletonDescription->getSortedBones();
+
+                    // point attributes
+                    GT_Real32Array* points = new GT_Real32Array(0, 3, GT_TYPE_POINT);
+                    GT_DataArrayHandle pointsHandle(points);
+                    _sharedAttributes[0] = GT_AttributeList::createAttributeList(GEO_STD_ATTRIB_POSITION, pointsHandle);
+                    const glm::PODArray<glm::HierarchicalBone*>& hBones = _character->_converterMapping._skeletonDescription->getBones();
+
+                    size_t curveCount = 0;
+                    for (size_t iBone = 0, minBoneCount = glm::min(sortedBones.size(), (size_t)boneCount); iBone < minBoneCount; ++iBone)
+                    {
+                        const glm::HierarchicalBone* hBone = hBones[sortedBones[iBone]];
+                        const glm::HierarchicalBone* hBoneParent = hBone->getFather();
+                        if (hBoneParent == NULL)
+                        {
+                            continue;
+                        }
+                        ++curveCount;
+                    }
+
+                    GT_IntConstant* pointsPerCurve = new GT_IntConstant(curveCount, 2);
+                    GT_DataArrayHandle pointsPerCurveHandle(pointsPerCurve);
+
+                    GT_AttributeListHandle uniformAttr;
+
+                    GT_AttributeListHandle detailAttr = GT_AttributeList::createAttributeList(getEntityIdAttrName().c_str(), entityIdsHandle);
+
+                    if (curveCount > 0)
+                    {
+                        _viewportGeo = new GT_PrimCurveMesh(GT_BASIS_LINEAR, pointsPerCurveHandle, _sharedAttributes[0], uniformAttr, detailAttr, false);
+                    }
+                    else
+                    {
+                        _viewportGeo = new GT_PrimPointMesh(_sharedAttributes[0], detailAttr);
+                    }
+                }
+                break;
+                case glm::GolaemDisplayMode::SKINMESH:
+                {
+                    // compute shaders
+                    const glm::Array<glm::GlmString>& shaderData = _shaderDataContainer->data[_inputData._entityIndex];
+
+                    glm::GlmMap<size_t, size_t> globalToIntShaderAttrIdx;
+                    glm::GlmMap<size_t, size_t> globalToFloatShaderAttrIdx;
+                    glm::GlmMap<size_t, size_t> globalToStringShaderAttrIdx;
+                    glm::GlmMap<size_t, size_t> globalToVectorShaderAttrIdx;
+
+                    glm::PODArray<int> intAttrValues;
+                    glm::PODArray<float> floatAttrValues;
+                    glm::Array<glm::GlmString> stringAttrValues;
+                    glm::Array<glm::Vector3> vectorAttrValues;
+
+                    for (size_t iShaderAttr = 0, shaderAttrCount = _character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
+                    {
+                        const glm::GlmString& attrValueStr = shaderData[iShaderAttr];
+                        const glm::ShaderAttribute& shaderAttr = _character->_shaderAttributes[iShaderAttr];
+                        switch (shaderAttr._type)
+                        {
+                        case glm::ShaderAttributeType::INT:
+                        {
+
+                            globalToIntShaderAttrIdx[iShaderAttr] = intAttrValues.size();
+                            intAttrValues.addOne();
+                            glm::fromString<int>(attrValueStr, intAttrValues.back());
+                        }
+                        break;
+                        case glm::ShaderAttributeType::FLOAT:
+                        {
+
+                            globalToFloatShaderAttrIdx[iShaderAttr] = floatAttrValues.size();
+                            floatAttrValues.addOne();
+                            glm::fromString<float>(attrValueStr, floatAttrValues.back());
+                        }
+                        break;
+                        case glm::ShaderAttributeType::STRING:
+                        {
+
+                            globalToStringShaderAttrIdx[iShaderAttr] = stringAttrValues.size();
+                            stringAttrValues.addOne();
+                            stringAttrValues.back() = attrValueStr;
+                        }
+                        break;
+                        case glm::ShaderAttributeType::VECTOR:
+                        {
+                            globalToVectorShaderAttrIdx[iShaderAttr] = vectorAttrValues.size();
+                            vectorAttrValues.addOne();
+                            glm::fromString(attrValueStr, vectorAttrValues.back());
+                        }
+                        break;
+                        default:
+                            break;
+                        }
+                    }
+
+                    geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
+                    if (geoStatus == glm::crowdio::GIO_SUCCESS)
+                    {
+                        GT_PrimCollect* primCollect = new GT_PrimCollect();
+                        size_t meshCount = outputData._meshAssetNameIndices.size();
+
+                        _sharedAttributes.resize(meshCount);
+                        _vertexAttributes.resize(meshCount);
+
+                        glm::PODArray<int> meshShadingGroups(meshCount, -1);
+
+                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        {
+                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iMesh]];
+                            int& shadingGroupIdx = meshShadingGroups[iMesh];
+
+                            // find shader assets
+                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iMesh];
+                            int meshAssetIdx = _character->findMeshAssetIdx(meshName);
+                            if (meshAssetIdx != -1)
+                            {
+                                const glm::MeshAsset& meshAsset = _character->_meshAssets[meshAssetIdx];
+                                if (iMaterial < meshAsset._shadingGroups.size())
+                                {
+                                    shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
+                                }
+                            }
+
+                            if (shadingGroupIdx == -1)
+                            {
+                                GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
+                            }
+                        }
+
+                        glm::Array<glm::Array<glm::Vector3>>& frameDeformedVertices = outputData._deformedVertices[0];
+
+                        _pointsHandles.resize(meshCount);
+                        _normalsHandles.resize(meshCount);
+
+                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        {
+                            GT_Int32Array* polyCounts = new GT_Int32Array(0, 1);
+                            GT_DataArrayHandle polyCountsHandle(polyCounts);
+
+                            GT_Int32Array* polyPointNumbers = new GT_Int32Array(0, 1);
+                            GT_DataArrayHandle polyPointNumbersHandle(polyPointNumbers);
+
+                            GT_Real32Array* uvs = new GT_Real32Array(0, 2, GT_TYPE_TEXTURE);
+                            GT_DataArrayHandle uvsHandle(uvs);
+
+                            GT_DAIndexedString* materialAttr = new GT_DAIndexedString(1, 1);
+                            GT_DataArrayHandle materialAttrHandle(materialAttr);
+
+                            GT_DAIndexedString* meshNameAttr = new GT_DAIndexedString(1, 1);
+                            GT_DataArrayHandle meshNameAttrHandle(meshNameAttr);
+
+                            GT_Int32Array* intAttr = new GT_Int32Array(1, 1);
+                            GT_DataArrayHandle intAttrHandle(intAttr);
+
+                            GT_Real32Array* floatAttr = new GT_Real32Array(1, 1);
+                            GT_DataArrayHandle floatAttrHandle(floatAttr);
+
+                            GT_Real32Array* vectorAttr = new GT_Real32Array(1, 3);
+                            GT_DataArrayHandle vectorAttrHandle(vectorAttr);
+
+                            GT_DAIndexedString* stringAttr = new GT_DAIndexedString(1, 1);
+                            GT_DataArrayHandle stringAttrHandle(stringAttr);
+
+                            GT_Real32Array* points = new GT_Real32Array(0, 3, GT_TYPE_POINT);
+                            _pointsHandles[iMesh] = points;
+
+                            GT_Real32Array* normals = new GT_Real32Array(0, 3, GT_TYPE_NORMAL);
+                            _normalsHandles[iMesh] = normals;
+
+                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[iMesh];
+                            size_t vertexCount = meshDeformedVertices.size();
+                            if (vertexCount == 0)
+                            {
+                                continue;
+                            }
+
+                            _sharedAttributes[iMesh] = GT_AttributeList::createAttributeList(
+                                GEO_STD_ATTRIB_POSITION, _pointsHandles[iMesh]);
+
+                            _vertexAttributes[iMesh] = GT_AttributeList::createAttributeList(
+                                GEO_STD_ATTRIB_NORMAL, _normalsHandles[iMesh]);
+
+                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iMesh]];
+
+                            if (outputData._geoType == glm::crowdio::GeometryType::FBX)
+                            {
+                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
+                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
+                                // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
+                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
+
+                                FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
+                                bool hasNormals = false;
+                                bool hasMaterials = false;
+                                FbxLayerElementMaterial* materialElement = NULL;
+                                if (fbxLayer0 != NULL)
+                                {
+                                    hasNormals = fbxLayer0->GetNormals() != NULL;
+                                    materialElement = fbxLayer0->GetMaterials();
+                                    hasMaterials = materialElement != NULL;
+                                }
+
+                                glm::PODArray<int> vertexMasks;
+                                glm::PODArray<int> polygonMasks;
+
+                                unsigned int fbxVertexCount = fbxMesh->GetControlPointsCount();
+                                vertexMasks.assign(fbxVertexCount, -1);
+
+                                unsigned int fbxPolyCount = fbxMesh->GetPolygonCount();
+                                polygonMasks.assign(fbxPolyCount, 0);
+
+                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iMesh];
+
+                                // check material id and reconstruct data
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    unsigned int currentMtlIdx = 0;
+                                    if (hasMaterials)
+                                    {
+                                        currentMtlIdx = materialElement->GetIndexArray().GetAt(iFbxPoly);
+                                    }
+                                    if (currentMtlIdx == meshMtlIdx)
+                                    {
+                                        polygonMasks[iFbxPoly] = 1;
+                                        for (int iPolyVertex = 0, polyVertexCount = fbxMesh->GetPolygonSize(iFbxPoly); iPolyVertex < polyVertexCount; ++iPolyVertex)
+                                        {
+                                            int vertexId = fbxMesh->GetPolygonVertex(iFbxPoly, iPolyVertex);
+                                            int& vertexMask = vertexMasks[vertexId];
+                                            if (vertexMask >= 0)
+                                            {
+                                                continue;
+                                            }
+                                            vertexMask = 0;
+                                        }
+                                    }
+                                }
+
+                                unsigned int iActualVertex = 0;
+                                for (unsigned int iFbxVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
+                                {
+                                    int& vertexMask = vertexMasks[iFbxVertex];
+                                    if (vertexMask >= 0)
+                                    {
+                                        vertexMask = iActualVertex;
+                                        ++iActualVertex;
+                                    }
+                                }
+
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    if (polygonMasks[iFbxPoly])
+                                    {
+                                        int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
+
+                                        polyCounts->append(polySize);
+                                        for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                        {
+                                            // reverse polygon order
+                                            polyPointNumbers->append(vertexMasks[fbxMesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)]);
+                                        } // iPolyVertex
+                                    }
+                                }
+
+                                // find how many uv layers are available
+                                int uvSetCount = fbxMesh->GetLayerCount(FbxLayerElement::eUV);
+                                FbxLayerElementUV* uvElement = NULL;
+                                for (int iUVSet = 0; iUVSet < uvSetCount; ++iUVSet)
+                                {
+                                    glm::GlmString attrName = GEO_STD_ATTRIB_TEXTURE;
+                                    if (iUVSet > 0)
+                                    {
+                                        attrName += glm::toString(iUVSet + 1);
+                                    }
+                                    FbxLayer* layer = fbxMesh->GetLayer(fbxMesh->GetLayerTypedIndex((int)iUVSet, FbxLayerElement::eUV));
+                                    uvElement = layer->GetUVs();
+                                    bool uvsByControlPoint = uvElement->GetMappingMode() == FbxLayerElement::eByControlPoint;
+                                    bool uvReferenceDirect = uvElement->GetReferenceMode() == FbxLayerElement::eDirect;
+
+                                    if (uvsByControlPoint)
+                                    {
+                                        // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                        // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                        // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                        int uvIndex;
+                                        int actualIndexByPolyVertex = 0;
+                                        for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                        {
+                                            int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
+                                            if (polygonMasks[iFbxPoly])
+                                            {
+                                                uvs->resize(actualIndexByPolyVertex + polySize);
+                                                for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                                {
+                                                    // reverse polygon order
+                                                    uvIndex = vertexMasks[fbxMesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)];
+                                                    if (!uvReferenceDirect)
+                                                    {
+                                                        uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                                    }
+                                                    FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                                    uvs->set((float)tempUV[0], actualIndexByPolyVertex, 0);
+                                                    uvs->set((float)tempUV[1], actualIndexByPolyVertex, 1);
+
+                                                    ++actualIndexByPolyVertex;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        int uvIndex;
+                                        int actualIndexByPolyVertex = 0;
+                                        int fbxIndexByPolyVertex = 0;
+                                        for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                        {
+                                            int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
+                                            if (polygonMasks[iFbxPoly])
+                                            {
+                                                uvs->resize(actualIndexByPolyVertex + polySize);
+                                                for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex, ++actualIndexByPolyVertex)
+                                                {
+                                                    // reverse polygon order
+                                                    uvIndex = fbxIndexByPolyVertex + polySize - 1 - iPolyVertex;
+                                                    if (!uvReferenceDirect)
+                                                    {
+                                                        uvIndex = uvElement->GetIndexArray().GetAt(uvIndex);
+                                                    }
+
+                                                    FbxVector2 tempUV(uvElement->GetDirectArray().GetAt(uvIndex));
+                                                    uvs->set((float)tempUV[0], actualIndexByPolyVertex, 0);
+                                                    uvs->set((float)tempUV[1], actualIndexByPolyVertex, 1);
+
+                                                } // iPolyVertex
+                                            }
+                                            fbxIndexByPolyVertex += polySize;
+                                        } // iPoly
+                                    }
+                                    _vertexAttributes[iMesh] = _vertexAttributes[iMesh]->addAttribute(attrName.c_str(), uvsHandle, true);
+                                }
+                            }
+                            else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
+                            {
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iMesh]];
+                                glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
+
+                                for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                {
+                                    uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                    polyCounts->append(polySize);
+                                    for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                    {
+                                        // reverse polygon order
+                                        polyPointNumbers->append(assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx]);
+                                    }
+                                    iVertex += polySize;
+                                }
+
+                                if (assetFileMesh._uvSetCount > 0)
+                                {
+                                    for (size_t iUVSet = 0; iUVSet < assetFileMesh._uvSetCount; ++iUVSet)
+                                    {
+                                        glm::GlmString attrName = GEO_STD_ATTRIB_TEXTURE;
+                                        if (iUVSet > 0)
+                                        {
+                                            attrName += glm::toString(iUVSet + 1);
+                                        }
+
+                                        if (assetFileMesh._uvMode == glm::crowdio::GLM_UV_PER_CONTROL_POINT)
+                                        {
+                                            // houdini doesn't mix attributes with the same name but different owners by default (point or vertex)
+                                            // (the behavior can be overriden with GA_ReuseStrategy https://www.sidefx.com/docs/hdk/_h_d_k__geometry__intro.html#HDK_Geometry_Intro_Attribute)
+                                            // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
+
+                                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                            {
+                                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                                uvs->resize(iVertex + polySize);
+                                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                                {
+                                                    // reverse polygon order
+                                                    uint32_t uvIndex = assetFileMesh._polygonsVertexIndices[iVertex + polySize - 1 - iPolyVtx];
+                                                    uvs->set(assetFileMesh._us[iUVSet][uvIndex], iVertex + iPolyVtx, 0);
+                                                    uvs->set(assetFileMesh._vs[iUVSet][uvIndex], iVertex + iPolyVtx, 1);
+                                                }
+                                                iVertex += polySize;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                            {
+                                                uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                                uvs->resize(iVertex + polySize);
+                                                for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                                {
+                                                    // reverse polygon order
+                                                    uint32_t uvIndex = assetFileMesh._polygonsUVIndices[iVertex + polySize - 1 - iPolyVtx];
+                                                    uvs->set(assetFileMesh._us[iUVSet][uvIndex], iVertex + iPolyVtx, 0);
+                                                    uvs->set(assetFileMesh._vs[iUVSet][uvIndex], iVertex + iPolyVtx, 1);
+                                                }
+                                                iVertex += polySize;
+                                            }
+                                        }
+                                        _vertexAttributes[iMesh] = _vertexAttributes[iMesh]->addAttribute(attrName.c_str(), uvsHandle, true);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                continue;
+                            }
+
+                            GT_AttributeListHandle detailAttr;
+
+                            int shadingGroupIdx = meshShadingGroups[iMesh];
+                            glm::GlmString materialName = "";
+                            if (shadingGroupIdx >= 0)
+                            {
+                                const glm::ShadingGroup& shGroup = _character->_shadingGroups[shadingGroupIdx];
+                                materialName = _materialPath;
+                                materialName.rtrim("/");
+                                materialName += "/";
+                                switch (_materialAssignMode)
+                                {
+                                case GolaemMaterialAssignMode::BY_SHADING_GROUP:
+                                {
+                                    materialName += shGroup._name;
+                                }
+                                break;
+                                case GolaemMaterialAssignMode::BY_SURFACE_SHADER:
+                                {
+                                    // get the surface shader
+                                    int shaderAssetIdx = (*_shadingGroupToSurfaceShader)[shadingGroupIdx];
+                                    if (shaderAssetIdx >= 0)
+                                    {
+                                        const glm::ShaderAsset& shAsset = _character->_shaderAssets[shaderAssetIdx];
+                                        materialName += shAsset._name;
+                                    }
+                                    else
+                                    {
+                                        materialName += "glmDefaultMat";
+                                    }
+                                }
+                                break;
+                                default:
+                                    break;
+                                }
+                                materialName = glm::replaceString(materialName, ":", "_");
+
+                                materialAttr->setString(0, 0, materialName.c_str());
+                                meshNameAttr->setString(0, 0, meshName.c_str());
+                                detailAttr = GT_AttributeList::createAttributeList(
+                                    getEntityIdAttrName().c_str(), entityIdsHandle,
+                                    GEO_STD_ATTRIB_MATERIAL, materialAttrHandle,
+                                    getMeshAttrName().c_str(), meshNameAttrHandle);
+
+                                // add shading group attributes
+                                for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
+                                {
+                                    int shAttrIdx = shGroup._shaderAttributes[iShAttr];
+                                    const glm::ShaderAttribute& shAttr = _character->_shaderAttributes[shAttrIdx];
+                                    UT_StringHolder attrName = UT_VarEncode::encode(shAttr._name.c_str());
+                                    switch (shAttr._type)
+                                    {
+                                    case glm::ShaderAttributeType::INT:
+                                    {
+                                        size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
+                                        int attrValue = intAttrValues[attrValueIdx];
+                                        intAttr->set(attrValue, 0);
+
+                                        detailAttr = detailAttr->addAttribute(attrName, intAttrHandle, true);
+                                    }
+                                    break;
+                                    case glm::ShaderAttributeType::FLOAT:
+                                    {
+                                        size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
+                                        float attrValue = floatAttrValues[attrValueIdx];
+                                        floatAttr->set(attrValue, 0);
+                                        detailAttr = detailAttr->addAttribute(attrName, floatAttrHandle, true);
+                                    }
+                                    break;
+                                    case glm::ShaderAttributeType::STRING:
+                                    {
+                                        size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
+                                        const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                        stringAttr->setString(0, 0, attrValue.c_str());
+                                        detailAttr = detailAttr->addAttribute(attrName, stringAttrHandle, true);
+                                    }
+                                    break;
+                                    case glm::ShaderAttributeType::VECTOR:
+                                    {
+                                        size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
+                                        const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                        vectorAttr->set(attrValue[0], 0, 0);
+                                        vectorAttr->set(attrValue[1], 0, 1);
+                                        vectorAttr->set(attrValue[2], 0, 2);
+                                        detailAttr = detailAttr->addAttribute(attrName, vectorAttrHandle, true);
+                                    }
+                                    break;
+                                    default:
+                                        break;
+                                    }
+                                }
+                            }
+
+                            GT_AttributeListHandle uniformAttr;
+
+                            GT_PrimPolygonMesh* viewportMesh = new GT_PrimPolygonMesh(
+                                polyCountsHandle, polyPointNumbersHandle, _sharedAttributes[iMesh], _vertexAttributes[iMesh], uniformAttr, detailAttr);
+                            primCollect->appendPrimitive(viewportMesh);
+                        }
+                        _viewportGeo = primCollect;
+                    }
+                }
+                break;
+                default:
+                    break;
+                }
+            }
+            if (_updateViewport)
+            {
+                switch (_displayMode)
+                {
+                case glm::GolaemDisplayMode::BOUNDING_BOX:
+                {
+                    GT_Real32Array* points = new GT_Real32Array(8, 3, GT_TYPE_POINT);
+                    GT_DataArrayHandle pointsHandle(points);
+
+                    // point 0
+                    points->set(_rootPos[0] - _halfExtents[0], 0, 0);
+                    points->set(_rootPos[1] - _halfExtents[1], 0, 1);
+                    points->set(_rootPos[2] + _halfExtents[2], 0, 2);
+
+                    // point 1
+                    points->set(_rootPos[0] + _halfExtents[0], 1, 0);
+                    points->set(_rootPos[1] - _halfExtents[1], 1, 1);
+                    points->set(_rootPos[2] + _halfExtents[2], 1, 2);
+
+                    // point 2
+                    points->set(_rootPos[0] + _halfExtents[0], 2, 0);
+                    points->set(_rootPos[1] - _halfExtents[1], 2, 1);
+                    points->set(_rootPos[2] - _halfExtents[2], 2, 2);
+
+                    // point 3
+                    points->set(_rootPos[0] - _halfExtents[0], 3, 0);
+                    points->set(_rootPos[1] - _halfExtents[1], 3, 1);
+                    points->set(_rootPos[2] - _halfExtents[2], 3, 2);
+
+                    // point 4
+                    points->set(_rootPos[0] - _halfExtents[0], 4, 0);
+                    points->set(_rootPos[1] + _halfExtents[1], 4, 1);
+                    points->set(_rootPos[2] + _halfExtents[2], 4, 2);
+
+                    // point 5
+                    points->set(_rootPos[0] + _halfExtents[0], 5, 0);
+                    points->set(_rootPos[1] + _halfExtents[1], 5, 1);
+                    points->set(_rootPos[2] + _halfExtents[2], 5, 2);
+
+                    // point 6
+                    points->set(_rootPos[0] + _halfExtents[0], 6, 0);
+                    points->set(_rootPos[1] + _halfExtents[1], 6, 1);
+                    points->set(_rootPos[2] - _halfExtents[2], 6, 2);
+
+                    // point 7
+                    points->set(_rootPos[0] - _halfExtents[0], 7, 0);
+                    points->set(_rootPos[1] + _halfExtents[1], 7, 1);
+                    points->set(_rootPos[2] - _halfExtents[2], 7, 2);
+
+                    int pointIndex = _sharedAttributes[0]->getIndex(GEO_STD_ATTRIB_POSITION);
+                    _sharedAttributes[0]->set(pointIndex, pointsHandle);
+                }
+                break;
+                case glm::GolaemDisplayMode::SKELETON:
+                {
+                    const glm::crowdio::GlmSimulationData* simuData = _inputData._cachedSimulation->getFinalSimulationData();
+                    const glm::crowdio::GlmFrameData* frameData = _inputData._frameDatas[0];
+                    // set the bone positions
+                    uint16_t entityType = simuData->_entityTypes[_inputData._entityIndex];
+                    uint16_t boneCount = simuData->_boneCount[entityType];
+
+                    const glm::PODArray<glm::HierarchicalBone*>& hBones = _character->_converterMapping._skeletonDescription->getBones();
+                    const glm::PODArray<size_t>& sortedBones = _character->_converterMapping._skeletonDescription->getSortedBones();
+                    const glm::PODArray<size_t>& sortedBonesInverse = *_sortedBonesInverse;
+
+                    size_t curveCount = glm::min(sortedBones.size(), (size_t)boneCount);
+
+                    GT_Real32Array* points = new GT_Real32Array(curveCount * 2, 3, GT_TYPE_POINT);
+                    GT_DataArrayHandle pointsHandle(points);
+
+                    GT_Offset pointOffset = 0;
+
+                    for (size_t iBone = 0; iBone < curveCount; ++iBone)
+                    {
+                        const glm::HierarchicalBone* hBone = hBones[sortedBones[iBone]];
+                        const glm::HierarchicalBone* hBoneParent = hBone->getFather();
+                        if (hBoneParent == NULL)
+                        {
+                            continue;
+                        }
+                        int parentIdx = hBoneParent->getSpecificBoneIndex();
+                        int parentIdxInCache = (int)sortedBonesInverse[parentIdx];
+                        float* bonePos = frameData->_bonePositions[_bonePositionOffset + iBone];
+                        points->set(bonePos[0], pointOffset, 0);
+                        points->set(bonePos[1], pointOffset, 1);
+                        points->set(bonePos[2], pointOffset, 2);
+                        ++pointOffset;
+                        bonePos = frameData->_bonePositions[_bonePositionOffset + parentIdxInCache];
+                        points->set(bonePos[0], pointOffset, 0);
+                        points->set(bonePos[1], pointOffset, 1);
+                        points->set(bonePos[2], pointOffset, 2);
+                        ++pointOffset;
+                    }
+                    if (pointOffset == 0)
+                    {
+                        points->resize(1);
+                        points->set(_rootPos[0], 0, 0);
+                        points->set(_rootPos[1], 0, 1);
+                        points->set(_rootPos[2], 0, 2);
+                    }
+                    else
+                    {
+                        points->resize(pointOffset);
+                    }
+
+                    int pointIndex = _sharedAttributes[0]->getIndex(GEO_STD_ATTRIB_POSITION);
+                    _sharedAttributes[0]->set(pointIndex, pointsHandle);
+                }
+                break;
+                case glm::GolaemDisplayMode::SKINMESH:
+                {
+                    if (!firstCompute)
+                    {
+                        geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
+                    }
+                    if (geoStatus == glm::crowdio::GIO_SUCCESS)
+                    {
+                        size_t meshCount = outputData._meshAssetNameIndices.size();
+                        glm::Array<glm::Array<glm::Vector3>>& frameDeformedVertices = outputData._deformedVertices[0];
+                        glm::Array<glm::Array<glm::Vector3>>& frameDeformedNormals = outputData._deformedNormals[0];
+                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        {
+                            GT_Real32Array* points = new GT_Real32Array(0, 3, GT_TYPE_POINT);
+                            _pointsHandles[iMesh] = points;
+
+                            GT_Real32Array* normals = new GT_Real32Array(0, 3, GT_TYPE_NORMAL);
+                            _normalsHandles[iMesh] = normals;
+
+                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[iMesh];
+                            size_t vertexCount = meshDeformedVertices.size();
+                            if (vertexCount == 0)
+                            {
+                                continue;
+                            }
+
+                            points->resize(vertexCount);
+
+                            const glm::Array<glm::Vector3>& meshDeformedNormals = frameDeformedNormals[iMesh];
+                            for (size_t iVertex = 0; iVertex < vertexCount; ++iVertex)
+                            {
+                                const glm::Vector3& meshVertex = meshDeformedVertices[iVertex];
+                                points->set(meshVertex[0], iVertex, 0);
+                                points->set(meshVertex[1], iVertex, 1);
+                                points->set(meshVertex[2], iVertex, 2);
+                            }
+
+                            int pointIndex = _sharedAttributes[iMesh]->getIndex(GEO_STD_ATTRIB_POSITION);
+                            _sharedAttributes[iMesh]->set(pointIndex, _pointsHandles[iMesh]);
+
+                            if (outputData._geoType == glm::crowdio::GeometryType::FBX)
+                            {
+                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
+                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
+                                // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
+                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
+
+                                FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
+                                bool hasNormals = false;
+                                bool hasMaterials = false;
+                                FbxLayerElementMaterial* materialElement = NULL;
+                                if (fbxLayer0 != NULL)
+                                {
+                                    hasNormals = fbxLayer0->GetNormals() != NULL;
+                                    materialElement = fbxLayer0->GetMaterials();
+                                    hasMaterials = materialElement != NULL;
+                                }
+
+                                glm::PODArray<int> polygonMasks;
+
+                                unsigned int fbxPolyCount = fbxMesh->GetPolygonCount();
+                                polygonMasks.assign(fbxPolyCount, 0);
+
+                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iMesh];
+
+                                // check material id and reconstruct data
+                                for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                {
+                                    unsigned int currentMtlIdx = 0;
+                                    if (hasMaterials)
+                                    {
+                                        currentMtlIdx = materialElement->GetIndexArray().GetAt(iFbxPoly);
+                                    }
+                                    if (currentMtlIdx == meshMtlIdx)
+                                    {
+                                        polygonMasks[iFbxPoly] = 1;
+                                    }
+                                }
+                                if (hasNormals)
+                                {
+                                    // add normals
+
+                                    // normals are always stored per polygon vertex
+                                    int actualIndexByPolyVertex = 0;
+                                    for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                    {
+                                        if (polygonMasks[iFbxPoly])
+                                        {
+                                            int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
+                                            normals->resize(actualIndexByPolyVertex + polySize);
+                                            for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                            {
+                                                // reverse polygon order
+                                                const glm::Vector3& deformedNormal = meshDeformedNormals[actualIndexByPolyVertex + polySize - 1 - iPolyVertex];
+                                                normals->set(deformedNormal[0], actualIndexByPolyVertex + iPolyVertex, 0);
+                                                normals->set(deformedNormal[1], actualIndexByPolyVertex + iPolyVertex, 1);
+                                                normals->set(deformedNormal[2], actualIndexByPolyVertex + iPolyVertex, 2);
+                                            }
+                                            actualIndexByPolyVertex += polySize;
+                                        }
+                                    }
+                                    int normalIndex = _vertexAttributes[iMesh]->getIndex(GEO_STD_ATTRIB_NORMAL);
+                                    _vertexAttributes[iMesh]->set(normalIndex, _normalsHandles[iMesh]);
+                                }
+                            }
+                            else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
+                            {
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iMesh]];
+                                glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
+
+                                if (assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_POLYGON_VERTEX)
+                                {
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        normals->resize(iVertex + polySize);
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            const glm::Vector3& vtxNormal = meshDeformedNormals[iVertex + polySize - 1 - iPolyVtx];
+                                            normals->set(vtxNormal[0], iVertex + iPolyVtx, 0);
+                                            normals->set(vtxNormal[1], iVertex + iPolyVtx, 1);
+                                            normals->set(vtxNormal[2], iVertex + iPolyVtx, 2);
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                                else
+                                {
+                                    uint32_t* polygonNormalIndices = assetFileMesh._normalMode == glm::crowdio::GLM_NORMAL_PER_CONTROL_POINT ? assetFileMesh._polygonsVertexIndices : assetFileMesh._polygonsNormalIndices;
+                                    for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
+                                    {
+                                        uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
+                                        normals->resize(iVertex + polySize);
+                                        for (uint32_t iPolyVtx = 0; iPolyVtx < polySize; ++iPolyVtx)
+                                        {
+                                            // reverse polygon order
+                                            uint32_t normalIdx = polygonNormalIndices[iVertex + polySize - 1 - iPolyVtx];
+                                            const glm::Vector3& vtxNormal = meshDeformedNormals[normalIdx];
+                                            normals->set(vtxNormal[0], iVertex + iPolyVtx, 0);
+                                            normals->set(vtxNormal[1], iVertex + iPolyVtx, 1);
+                                            normals->set(vtxNormal[2], iVertex + iPolyVtx, 2);
+                                        }
+                                        iVertex += polySize;
+                                    }
+                                }
+                                int normalIndex = _vertexAttributes[iMesh]->getIndex(GEO_STD_ATTRIB_NORMAL);
+                                _vertexAttributes[iMesh]->set(normalIndex, _normalsHandles[iMesh]);
+                            }
+                        }
+                    }
+                }
+                break;
+                default:
+                    break;
+                }
+                _updateViewport = false;
+            }
+        }
+        else
+        {
+            _viewportGeo = GT_PrimitiveHandle();
+        }
+        return _viewportGeo;
     }
 
 } // namespace glm

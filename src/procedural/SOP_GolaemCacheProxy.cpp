@@ -1119,7 +1119,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity, ++primitiveIndex)
         {
             glm::GU_PackedGolaemEntity* packedEntity = NULL;
-            bool entityIsNew = false;
 
             GA_Primitive* prim = NULL;
             if (primitiveIndex < primCount)
@@ -1128,13 +1127,17 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
             if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
             {
-                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>((static_cast<GU_PrimPacked*>(prim))->implementation());
+                GU_PrimPacked* guPrim = static_cast<GU_PrimPacked*>(prim);
+                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(guPrim->implementation());
             }
             else
             {
-                entityIsNew = true;
                 packedEntity = glm::GU_PackedGolaemEntity::build(gdp);
             }
+            bool entityIsNew = packedEntity->_inputData._entityId == -1;
+
+            // set it to -1 in case it existed but was killed
+            packedEntity->_inputData._entityId = -1;
 
             int64_t entityId = simuData->_entityIds[iEntity];
             if (entityId < 0)
@@ -1179,11 +1182,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
             ++entityCount;
 
+            // set the entity id to tell it it's still valid
+            packedEntity->_inputData._entityId = entityId;
             if (entityIsNew)
             {
                 //packedEntity->_inputData._dirMapRules // left empty for now
                 packedEntity->_inputData._entityIndex = iEntity;
-                packedEntity->_inputData._entityId = entityId;
                 packedEntity->_character = character;
                 packedEntity->_inputData._geometryTag = geoTag;
                 packedEntity->_inputData._cachedSimulation = &cachedSimulation;
@@ -1217,6 +1221,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             packedEntity->_inputData._frameDatas[0] = frameData;
             packedEntity->_inputData._frames[0] = (double)currentFrame;
             packedEntity->_updateGeo = true;
+            packedEntity->_updateViewport = true;
         }
     }
 
