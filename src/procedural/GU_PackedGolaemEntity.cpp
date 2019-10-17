@@ -511,12 +511,10 @@ namespace glm
                                 FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
 
                                 FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
-                                bool hasNormals = false;
                                 bool hasMaterials = false;
                                 FbxLayerElementMaterial* materialElement = NULL;
                                 if (fbxLayer0 != NULL)
                                 {
-                                    hasNormals = fbxLayer0->GetNormals() != NULL;
                                     materialElement = fbxLayer0->GetMaterials();
                                     hasMaterials = materialElement != NULL;
                                 }
