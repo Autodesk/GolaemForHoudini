@@ -153,14 +153,6 @@ namespace glm
     }
 
     //-----------------------------------------------------------------------------
-    GU_PackedGolaemEntity* GU_PackedGolaemEntity::build(GU_Detail* gdp)
-    {
-        GU_PrimPacked* packedPrim = GU_PrimPacked::build(*gdp, theGolaemFactory->typeDef().getId());
-        GU_PackedGolaemEntity* packedEntity = static_cast<GU_PackedGolaemEntity*>(packedPrim->implementation());
-        return packedEntity;
-    }
-
-    //-----------------------------------------------------------------------------
     const GA_PrimitiveTypeId& GU_PackedGolaemEntity::getTypeId()
     {
         return _typeId;
@@ -216,89 +208,17 @@ namespace glm
     //-----------------------------------------------------------------------------
     bool GU_PackedGolaemEntity::load(GU_PrimPacked* prim, const UT_Options& options, const GA_LoadMap& map)
     {
-        updateFrom(prim, options);
         GLM_UNREFERENCED(map);
+        updateFrom(prim, options);
+        // invalidate entity
+        _inputData._entityId = -1;
         return true;
     }
 
     //-----------------------------------------------------------------------------
     void GU_PackedGolaemEntity::updateFrom(GU_PrimPacked* prim, const UT_Options& options)
     {
-        int64_t intValue;
-        double doubleValue;
-        UT_Vector3F vector3Value;
-        UT_StringHolder stringValue;
-        if (import(options, "entityIndex", intValue))
-        {
-            _inputData._entityIndex = (uint32_t)intValue;
-        }
-        if (import(options, "entityId", intValue))
-        {
-            _inputData._entityId = intValue;
-        }
-        if (import(options, "character", intValue))
-        {
-            _character = (const glm::GolaemCharacter*)intValue;
-        }
-        if (import(options, "geometryTag", intValue))
-        {
-            _inputData._geometryTag = (short)intValue;
-        }
-        if (import(options, "sortedBonesInverse", intValue))
-        {
-            _sortedBonesInverse = (glm::PODArray<size_t>*)intValue;
-        }
-        if (import(options, "shaderDataContainer", intValue))
-        {
-            _shaderDataContainer = (const glm::ShaderAssetDataContainer*)intValue;
-        }
-        if (import(options, "cachedSimulation", intValue))
-        {
-            _inputData._cachedSimulation = (crowdio::CachedSimulation*)intValue;
-        }
-
-        if (options.hasOption("halfExtents"))
-        {
-            vector3Value = options.getOptionV3("halfExtents");
-            _halfExtents.setValues(vector3Value[0], vector3Value[1], vector3Value[2]);
-        }
-        if (import(options, "sortedBonesInverse", intValue))
-        {
-            _sortedBonesInverse = (glm::PODArray<size_t>*)intValue;
-        }
-        if (import(options, "displayMode", intValue))
-        {
-            _displayMode = (GolaemDisplayMode::Value)intValue;
-        }
-        if (import(options, "shadingGroupToSurfaceShader", intValue))
-        {
-            _shadingGroupToSurfaceShader = (glm::PODArray<int>*)intValue;
-        }
-        if (import(options, "materialAssignMode", intValue))
-        {
-            _materialAssignMode = (GolaemMaterialAssignMode::Value)intValue;
-        }
-        if (import(options, "materialPath", stringValue))
-        {
-            _materialPath = stringValue.c_str();
-        }
-        if (options.hasOption("rootPos"))
-        {
-            vector3Value = options.getOptionV3("rootPos");
-            _rootPos.setValues(vector3Value[0], vector3Value[1], vector3Value[2]);
-        }
-        if (import(options, "shaderDataContainer", intValue))
-        {
-            _shaderDataContainer = (const glm::ShaderAssetDataContainer*)intValue;
-        }
-        if (import(options, "frameData", intValue))
-        {
-            _inputData._frameDatas[0] = (const glm::crowdio::GlmFrameData*)intValue;
-        }
-        if (import(options, "frame", doubleValue))
-        {
-            _inputData._frames[0] = doubleValue;
-        }
+        GLM_UNREFERENCED(options);
         clearGeo();
         prim->topologyDirty();
     }
@@ -312,23 +232,7 @@ namespace glm
     //-----------------------------------------------------------------------------
     bool GU_PackedGolaemEntity::save(UT_Options& options, const GA_SaveMap& map) const
     {
-        options.setOptionI("entityIndex", _inputData._entityIndex);
-        options.setOptionI("entityId", (int64)_inputData._entityId);
-        options.setOptionI("character", (int64)_character);
-        options.setOptionI("geometryTag", (int64)_inputData._geometryTag);
-        options.setOptionI("sortedBonesInverse", (int64)_sortedBonesInverse);
-        options.setOptionI("shaderDataContainer", (int64)_shaderDataContainer);
-        options.setOptionI("cachedSimulation", (int64)_inputData._cachedSimulation);
-        options.setOptionV3("halfExtents", UT_Vector3F(_halfExtents.getFloatValues()));
-        options.setOptionI("sortedBonesInverse", (int64)_sortedBonesInverse);
-        options.setOptionI("displayMode", (int64)_displayMode);
-        options.setOptionI("shadingGroupToSurfaceShader", (int64)_shadingGroupToSurfaceShader);
-        options.setOptionI("materialAssignMode", (int64)_materialAssignMode);
-        options.setOptionS("materialPath", _materialPath.c_str());
-        options.setOptionV3("rootPos", UT_Vector3F(_rootPos.getFloatValues()));
-        options.setOptionI("shaderDataContainer", (int64)_shaderDataContainer);
-        options.setOptionI("frameData", (int64)_inputData._frameDatas[0]);
-        options.setOptionF("frame", _inputData._frames[0]);
+        GLM_UNREFERENCED(options);
         GLM_UNREFERENCED(map);
         return true;
     }

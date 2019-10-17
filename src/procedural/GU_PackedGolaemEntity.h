@@ -77,8 +77,6 @@ namespace glm
 
         virtual ~GU_PackedGolaemEntity();
 
-        static GU_PackedGolaemEntity* build(GU_Detail* gdp);
-
         /// Get the type ID for the GU_PackedSphere primitive type.
         static const GA_PrimitiveTypeId& getTypeId();
 

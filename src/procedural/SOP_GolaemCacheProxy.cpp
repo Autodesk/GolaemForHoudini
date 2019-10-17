@@ -160,7 +160,7 @@ class SOP_GolaemCacheProxy : public SOP_Node
 private:
     bool _needsRefresh;
     bool _noUpdateLoop;
-    bool _clearBakedGeo;
+    bool _clearGeo;
 
     glm::crowdio::SimulationCacheFactory _factory;
     glm::Array<glm::PODArray<size_t>> _sortedBonesInversePerChar;
@@ -664,7 +664,7 @@ void SOP_GolaemCacheProxy::refreshParameters(
     }
     if (updateCache || updateCharacterFiles || updateLayout || updateDisplayMode)
     {
-        _clearBakedGeo = true;
+        _clearGeo = true;
     }
     if (updateTerrain)
     {
@@ -902,7 +902,7 @@ SOP_GolaemCacheProxy::SOP_GolaemCacheProxy(OP_Network* net, const char* name, OP
     : SOP_Node(net, name, op)
     , _needsRefresh(true)
     , _noUpdateLoop(false)
-    , _clearBakedGeo(false)
+    , _clearGeo(false)
 {
     //mySopFlags.setManagesDataIDs(true);
 }
@@ -1011,8 +1011,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         return error();
     }
 
-    int isRender = isCookingRender();
-
     fpreal time = context.getTime();
     if (_needsRefresh)
     {
@@ -1027,21 +1025,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     evalString(cfNames, getParamName(GolaemParams::CROWDFIELD_NAMES), 0, time);
 
     glm::GolaemDisplayMode::Value displayMode = (glm::GolaemDisplayMode::Value)evalInt(getParamName(GolaemParams::DISPLAY_MODE), 0, time);
-    if (isRender)
+    if (_clearGeo)
     {
-        if (displayMode != glm::GolaemDisplayMode::SKINMESH)
-        {
-            _clearBakedGeo = true;
-        }
-        // always render skinmeshes
-        displayMode = glm::GolaemDisplayMode::SKINMESH;
-    }
-
-    if (_clearBakedGeo)
-    {
-        // clean all baked entities
+        // clean all entities
         gdp->clearAndDestroy();
-        _clearBakedGeo = false;
+        _clearGeo = false;
 
         _sortedBonesInversePerChar.resize(_factory.getGolaemCharacters().size());
         _sgToSsPerChar.resize(_factory.getGolaemCharacters().size());
@@ -1127,12 +1115,14 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             }
             if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
             {
-                GU_PrimPacked* guPrim = static_cast<GU_PrimPacked*>(prim);
-                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(guPrim->implementation());
+                GU_PrimPacked* packedPrim = static_cast<GU_PrimPacked*>(prim);
+                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
             }
             else
             {
-                packedEntity = glm::GU_PackedGolaemEntity::build(gdp);
+                GU_PrimPacked* packedPrim = GU_PrimPacked::build(*gdp, glm::GU_PackedGolaemEntity::getTypeId());
+                packedEntity = static_cast<glm ::GU_PackedGolaemEntity*>(packedPrim->implementation());
+                prim = packedPrim;
             }
             bool entityIsNew = packedEntity->_inputData._entityId == -1;
 
