@@ -1004,7 +1004,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     table->addOperator(op);
 
     glm::GlmString licenseInfo = glm::crowdio::getLicenseRLMString();
-    if (glm::crowdio::hasFullLicenseFeatures())
+    if (glm::crowdio::hasLayoutLicenseFeatures())
     {
         licenseInfo = "1;" + licenseInfo;
     }
