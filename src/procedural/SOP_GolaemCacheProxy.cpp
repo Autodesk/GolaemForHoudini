@@ -1221,7 +1221,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             packedEntity->_inputData._frameDatas[0] = frameData;
             packedEntity->_inputData._frames[0] = (double)currentFrame;
             packedEntity->_updateGeo = true;
-            packedEntity->_updateViewport = true;
         }
     }
 

@@ -41,39 +41,6 @@ namespace glm
     }
 
     //-----------------------------------------------------------------------------
-    class ComputeViewportGeo
-    {
-    public:
-        glm::PODArray<const GU_PackedGolaemEntity*> _golaemEntities;
-        GT_PrimCollect* _primCollection;
-
-        ComputeViewportGeo(GT_PrimCollect* primCollection);
-        ~ComputeViewportGeo();
-        void operator()(const UT_BlockedRange<int64_t>& range) const;
-    };
-
-    //-----------------------------------------------------------------------------
-    ComputeViewportGeo::ComputeViewportGeo(GT_PrimCollect* primCollection)
-        : _primCollection(primCollection)
-    {
-    }
-
-    //-----------------------------------------------------------------------------
-    ComputeViewportGeo::~ComputeViewportGeo()
-    {
-    }
-
-    //-----------------------------------------------------------------------------
-    void ComputeViewportGeo::operator()(const UT_BlockedRange<int64_t>& range) const
-    {
-        for (int64_t iEntity = range.begin(); iEntity != range.end(); ++iEntity)
-        {
-            const GU_PackedGolaemEntity* golaemEntity = _golaemEntities[iEntity];
-            _primCollection->appendPrimitive(golaemEntity->computeViewportGeo());
-        }
-    }
-
-    //-----------------------------------------------------------------------------
     GT_GEOPrimCollectData* GT_PackedGolaemEntity::beginCollecting(const GT_GEODetailListHandle& geometry, const GT_RefineParms* parms) const
     {
         GLM_UNREFERENCED(geometry);
@@ -111,8 +78,6 @@ namespace glm
 
         GT_PrimCollect* primCollection = new GT_PrimCollect();
 
-        ComputeViewportGeo computeFunctor(primCollection);
-
         for (exint iPrim = 0; iPrim < primCount; ++iPrim)
         {
             const GA_Primitive* prim = detailPtr->getPrimitive(offsets(iPrim));
@@ -124,13 +89,9 @@ namespace glm
                 {
                     continue;
                 }
-                //primCollection->appendPrimitive(new GT_GEOPrimPacked(geoHandle, packedPrim));
-                computeFunctor._golaemEntities.push_back(packedEntity);
+                primCollection->appendPrimitive(new GT_GEOPrimPacked(geoHandle, packedPrim));
             }
         }
-
-        // do the computes in parallel
-        UTparallelForEachNumber((int64_t)computeFunctor._golaemEntities.size(), computeFunctor);
 
         return primCollection;
     }

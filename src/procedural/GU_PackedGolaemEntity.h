@@ -10,7 +10,6 @@
 
 HDK_INCLUDES_START
 
-#include <GT/GT_Handles.h>
 #include <GU/GU_PackedImpl.h>
 
 HDK_INCLUDES_END
@@ -63,17 +62,10 @@ namespace glm
         glm::GlmString _materialPath;
 
         mutable bool _updateGeo;
-        mutable bool _updateViewport;
         mutable glm::PODArray<GA_Offset> _pointStartOffsets;
         mutable glm::PODArray<GA_Offset> _vertexOffsets; // for geometry generation
 
         mutable GU_DetailHandle _detail;
-
-        mutable GT_PrimitiveHandle _viewportGeo;
-        mutable glm::Array<GT_AttributeListHandle> _sharedAttributes;
-        mutable glm::Array<GT_AttributeListHandle> _vertexAttributes;
-        mutable glm::Array<GT_DataArrayHandle> _pointsHandles;
-        mutable glm::Array<GT_DataArrayHandle> _normalsHandles;
 
     private:
         static GA_PrimitiveTypeId _typeId;
@@ -114,8 +106,6 @@ namespace glm
         /// Count memory usage using a UT_MemoryCounter in order to count
         /// shared memory correctly.
         void countMemory(UT_MemoryCounter& counter, bool inclusive) const override;
-
-        GT_PrimitiveHandle computeViewportGeo() const;
 
     private:
         void clearGeo();
