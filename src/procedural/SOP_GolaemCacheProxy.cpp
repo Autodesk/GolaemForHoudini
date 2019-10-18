@@ -778,9 +778,11 @@ void SOP_GolaemCacheProxy::updateCacheLibParams(fpreal time)
     bool enableLayout = false;
     glm::GlmString layoutFiles;
 
-    glm::crowdio::SimulationCacheInformation* cacheInfo = simuCacheLibrary.getCacheInformationByName(cacheLibItem.c_str());
+    glm::crowdio::SimulationCacheInformation* cacheInfo = simuCacheLibrary.getCacheInformationByItemName(cacheLibItem.c_str());
     if (cacheInfo == NULL && simuCacheLibrary.getCacheInformationCount() > 0)
     {
+        GLM_CROWD_TRACE_WARNING("Could not find simulation cache item '"
+                                << cacheLibItem.c_str() << "' in library file '" << cacheLibPath.c_str() << "'");
         cacheInfo = &simuCacheLibrary.getCacheInformation(0);
     }
     if (cacheInfo != NULL)
