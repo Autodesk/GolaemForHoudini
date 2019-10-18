@@ -11,6 +11,7 @@
 HDK_INCLUDES_START
 
 #include <GU/GU_PackedImpl.h>
+#include <GT/GT_Handles.h>
 
 HDK_INCLUDES_END
 
@@ -66,6 +67,8 @@ namespace glm
         mutable glm::PODArray<GA_Offset> _vertexOffsets; // for geometry generation
 
         mutable GU_DetailHandle _detail;
+
+        mutable GT_PrimitiveHandle _viewportGeo;
 
     private:
         static GA_PrimitiveTypeId _typeId;

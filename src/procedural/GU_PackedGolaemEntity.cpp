@@ -218,9 +218,9 @@ namespace glm
     //-----------------------------------------------------------------------------
     void GU_PackedGolaemEntity::updateFrom(GU_PrimPacked* prim, const UT_Options& options)
     {
+        GLM_UNREFERENCED(prim);
         GLM_UNREFERENCED(options);
         clearGeo();
-        prim->topologyDirty();
     }
 
     //-----------------------------------------------------------------------------

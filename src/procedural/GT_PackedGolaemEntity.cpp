@@ -45,17 +45,36 @@ namespace glm
     {
         GLM_UNREFERENCED(geometry);
         GLM_UNREFERENCED(parms);
-        return new GT_GEOPrimCollectOffsets();
+        return NULL;
     }
 
     //-----------------------------------------------------------------------------
     GT_PrimitiveHandle GT_PackedGolaemEntity::collect(const GT_GEODetailListHandle& geometry, const GEO_Primitive* const* prim_list, int nsegments, GT_GEOPrimCollectData* data) const
     {
         GLM_UNREFERENCED(nsegments);
-        GLM_UNREFERENCED(geometry);
+        GLM_UNREFERENCED(data);
 
-        GT_GEOPrimCollectOffsets* collectData = data->asPointer<GT_GEOPrimCollectOffsets>();
-        collectData->append(prim_list[0]);
+        GU_ConstDetailHandle geoHandle = geometry->getGeometry(0);
+
+        const GEO_Primitive* prim = prim_list[0];
+        if (prim != NULL && prim->getTypeId() == GU_PackedGolaemEntity::getTypeId())
+        {
+            const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(prim);
+            const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+            if (packedEntity->_inputData._entityId != -1)
+            {
+                if (packedEntity->_viewportGeo.get() == NULL)
+                {
+                    packedEntity->_viewportGeo = new GT_GEOPrimPacked(geoHandle, packedPrim);
+                }
+                return packedEntity->_viewportGeo;
+            }
+            else
+            {
+                packedEntity->_viewportGeo = GT_PrimitiveHandle();
+            }
+        }
+
         return GT_PrimitiveHandle();
     }
 
@@ -65,35 +84,7 @@ namespace glm
         GLM_UNREFERENCED(geometry);
         GLM_UNREFERENCED(data);
 
-        GU_ConstDetailHandle geoHandle = geometry->getGeometry(0);
-        GU_DetailHandleAutoReadLock rlock(geoHandle);
-        const GU_Detail* detailPtr = rlock.getGdp();
-        GT_GEOPrimCollectOffsets* collectData = data->asPointer<GT_GEOPrimCollectOffsets>();
-        const GT_GEOOffsetList& offsets = collectData->getPrimitives();
-        GT_Size primCount = offsets.entries();
-        if (primCount == 0)
-        {
-            return GT_PrimitiveHandle();
-        }
-
-        GT_PrimCollect* primCollection = new GT_PrimCollect();
-
-        for (exint iPrim = 0; iPrim < primCount; ++iPrim)
-        {
-            const GA_Primitive* prim = detailPtr->getPrimitive(offsets(iPrim));
-            if (prim != NULL && prim->getTypeId() == GU_PackedGolaemEntity::getTypeId())
-            {
-                const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(prim);
-                const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
-                if (packedEntity->_inputData._entityId == -1)
-                {
-                    continue;
-                }
-                primCollection->appendPrimitive(new GT_GEOPrimPacked(geoHandle, packedPrim));
-            }
-        }
-
-        return primCollection;
+        return GT_PrimitiveHandle();
     }
 
 } // namespace glm
