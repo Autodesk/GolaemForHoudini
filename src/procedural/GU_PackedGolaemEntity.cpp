@@ -505,8 +505,6 @@ namespace glm
 
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
-                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
-                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
                                 FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
 
@@ -990,8 +988,6 @@ namespace glm
                             const GA_Offset& vertexOffset = _vertexOffsets[iMesh];
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
-                                // must use the same fbx mutex because of fbx's 'unthreadfullness'
-                                glm::ScopedLock<glm::Mutex> lock(glm::crowdio::getCrowdFBXMutex());
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
                                 FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
 
@@ -1106,6 +1102,8 @@ namespace glm
 
                 _updateGeo = false;
             }
+            // release fbx locks here, called by outputData destructor, but add the explicit call just in case
+            outputData.finish();
         }
         else if (!detailPtr->isEmpty())
         {
