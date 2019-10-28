@@ -455,13 +455,13 @@ namespace glm
 
                         glm::PODArray<int> meshShadingGroups(meshCount, -1);
 
-                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        for (size_t iRenderMesh = 0; iRenderMesh < meshCount; ++iRenderMesh)
                         {
-                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iMesh]];
-                            int& shadingGroupIdx = meshShadingGroups[iMesh];
+                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iRenderMesh]];
+                            int& shadingGroupIdx = meshShadingGroups[iRenderMesh];
 
                             // find shader assets
-                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iMesh];
+                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iRenderMesh];
                             int meshAssetIdx = _character->findMeshAssetIdx(meshName);
                             if (meshAssetIdx != -1)
                             {
@@ -482,31 +482,33 @@ namespace glm
 
                         _vertexOffsets.resize(meshCount);
 
-                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        for (size_t iRenderMesh = 0; iRenderMesh < meshCount; ++iRenderMesh)
                         {
-                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[iMesh];
+                            size_t iGeoFileMesh = outputData._meshAssetNameIndices[iRenderMesh];
+                            size_t meshIdxInVertexArray = outputData._geoType == glm::crowdio::GeometryType::FBX ? iGeoFileMesh : iRenderMesh;
+                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[meshIdxInVertexArray];
                             size_t vertexCount = meshDeformedVertices.size();
                             if (vertexCount == 0)
                             {
                                 continue;
                             }
 
-                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iMesh]];
+                            const glm::GlmString& meshName = outputData._meshAssetNames[iGeoFileMesh];
 
                             polyCounts.clear();
                             polygonpointnumbers.clear();
 
                             GA_Offset primOffset;
-                            GA_Offset& vertexOffset = _vertexOffsets[iMesh];
+                            GA_Offset& vertexOffset = _vertexOffsets[iRenderMesh];
 
-                            GA_Offset& pointStartOffset = _pointStartOffsets[iMesh];
+                            GA_Offset& pointStartOffset = _pointStartOffsets[iRenderMesh];
 
                             pointStartOffset = detailPtr->appendPointBlock(vertexCount);
 
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
-                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
+                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
 
                                 FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
                                 bool hasMaterials = false;
@@ -526,7 +528,7 @@ namespace glm
                                 unsigned int fbxPolyCount = fbxMesh->GetPolygonCount();
                                 polygonMasks.assign(fbxPolyCount, 0);
 
-                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iMesh];
+                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iRenderMesh];
 
                                 // check material id and reconstruct data
                                 for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
@@ -552,8 +554,7 @@ namespace glm
                                     }
                                 }
 
-                                unsigned int iActualVertex = 0;
-                                for (unsigned int iFbxVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
+                                for (unsigned int iFbxVertex = 0, iActualVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
                                 {
                                     int& vertexMask = vertexMasks[iFbxVertex];
                                     if (vertexMask >= 0)
@@ -661,7 +662,7 @@ namespace glm
                             }
                             else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
                             {
-                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iMesh]];
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
                                 glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                                 for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
@@ -744,7 +745,7 @@ namespace glm
                             GA_Attribute* materialAttr = detailPtr->addStringTuple(GA_ATTRIB_PRIMITIVE, GEO_STD_ATTRIB_MATERIAL, 1);
                             GA_RWHandleS materialAttrHandle(materialAttr);
 
-                            int shadingGroupIdx = meshShadingGroups[iMesh];
+                            int shadingGroupIdx = meshShadingGroups[iRenderMesh];
                             glm::GlmString materialName = "";
                             if (shadingGroupIdx >= 0)
                             {
@@ -962,34 +963,59 @@ namespace glm
                     }
                     if (geoStatus == glm::crowdio::GIO_SUCCESS)
                     {
+                        // ----- FBX specific data
+                        FbxAMatrix nodeTransform;
+                        FbxAMatrix geomTransform;
+                        FbxAMatrix identityMatrix;
+                        identityMatrix.SetIdentity();
+                        FbxTime fbxTime;
+                        FbxVector4 fbxVect;
+                        // ----- end FBX specific data
+
+                        if (outputData._geoType == glm::crowdio::GeometryType::FBX)
+                        {
+                            // Extract frame
+                            if (outputData._geoBeInfo._idGeometryFileIdx != -1)
+                            {
+                                const glm::crowdio::GlmFrameData* frameData = _inputData._frameDatas[0];
+                                float(&geometryFrameCacheData)[3] = frameData->_geoBehaviorAnimFrameInfo[outputData._geoBeInfo._geoDataIndex];
+                                double frameRate(FbxTime::GetFrameRate(outputData._fbxCharacter->touchFBXScene()->GetGlobalSettings().GetTimeMode()));
+                                fbxTime.SetGlobalTimeMode(FbxTime::eCustom, frameRate);
+                                fbxTime.SetMilliSeconds(long((double)geometryFrameCacheData[0] / frameRate * 1000.0));
+                            }
+                            else
+                            {
+                                fbxTime = 0;
+                            }
+                        }
+
                         size_t meshCount = outputData._meshAssetNameIndices.size();
                         glm::Array<glm::Array<glm::Vector3>>& frameDeformedVertices = outputData._deformedVertices[0];
                         glm::Array<glm::Array<glm::Vector3>>& frameDeformedNormals = outputData._deformedNormals[0];
-                        for (size_t iMesh = 0; iMesh < meshCount; ++iMesh)
+                        for (size_t iRenderMesh = 0; iRenderMesh < meshCount; ++iRenderMesh)
                         {
-                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[iMesh];
+                            size_t iGeoFileMesh = outputData._meshAssetNameIndices[iRenderMesh];
+                            size_t meshIdxInVertexArray = outputData._geoType == glm::crowdio::GeometryType::FBX ? iGeoFileMesh : iRenderMesh;
+                            const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[meshIdxInVertexArray];
                             size_t vertexCount = meshDeformedVertices.size();
                             if (vertexCount == 0)
                             {
                                 continue;
                             }
 
-                            const GA_Offset& pointStartOffset = _pointStartOffsets[iMesh];
-                            const glm::Array<glm::Vector3>& meshDeformedNormals = frameDeformedNormals[iMesh];
-                            for (size_t iVertex = 0; iVertex < vertexCount; ++iVertex)
-                            {
-                                const glm::Vector3& meshVertex = meshDeformedVertices[iVertex];
-                                detailPtr->setPos3(pointStartOffset + iVertex,
-                                                   UT_Vector3(
-                                                       meshVertex[0],
-                                                       meshVertex[1],
-                                                       meshVertex[2]));
-                            }
-                            const GA_Offset& vertexOffset = _vertexOffsets[iMesh];
+                            const GA_Offset& pointStartOffset = _pointStartOffsets[iRenderMesh];
+                            const glm::Array<glm::Vector3>& meshDeformedNormals = frameDeformedNormals[meshIdxInVertexArray];
+                            const GA_Offset& vertexOffset = _vertexOffsets[iRenderMesh];
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
-                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iMesh);
+                                FbxNode* fbxNode = outputData._fbxCharacter->getCharacterFBXMeshes()[iGeoFileMesh];
+                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
+
+                                // for each mesh, get the transform in case of its position in not relative to the center of the world
+                                outputData._fbxCharacter->getMeshGlobalTransform(nodeTransform, fbxNode, fbxTime);
+                                glm::crowdio::CrowdFBXBaker::getGeomTransform(geomTransform, fbxNode);
+                                nodeTransform *= geomTransform;
 
                                 FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
                                 bool hasNormals = false;
@@ -1002,12 +1028,18 @@ namespace glm
                                     hasMaterials = materialElement != NULL;
                                 }
 
+                                bool hasTransform = !(nodeTransform == identityMatrix);
+
+                                glm::PODArray<int> vertexMasks;
                                 glm::PODArray<int> polygonMasks;
+
+                                unsigned int fbxVertexCount = fbxMesh->GetControlPointsCount();
+                                vertexMasks.assign(fbxVertexCount, -1);
 
                                 unsigned int fbxPolyCount = fbxMesh->GetPolygonCount();
                                 polygonMasks.assign(fbxPolyCount, 0);
 
-                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iMesh];
+                                unsigned int meshMtlIdx = outputData._meshAssetMaterialIndices[iRenderMesh];
 
                                 // check material id and reconstruct data
                                 for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
@@ -1020,37 +1052,123 @@ namespace glm
                                     if (currentMtlIdx == meshMtlIdx)
                                     {
                                         polygonMasks[iFbxPoly] = 1;
+                                        for (int iPolyVertex = 0, polyVertexCount = fbxMesh->GetPolygonSize(iFbxPoly); iPolyVertex < polyVertexCount; ++iPolyVertex)
+                                        {
+                                            int vertexId = fbxMesh->GetPolygonVertex(iFbxPoly, iPolyVertex);
+                                            int& vertexMask = vertexMasks[vertexId];
+                                            if (vertexMask >= 0)
+                                            {
+                                                continue;
+                                            }
+                                            vertexMask = 0;
+                                        }
                                     }
                                 }
+
+                                for (unsigned int iFbxVertex = 0, iActualVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
+                                {
+                                    int& vertexMask = vertexMasks[iFbxVertex];
+                                    if (vertexMask >= 0)
+                                    {
+                                        vertexMask = iActualVertex;
+                                        ++iActualVertex;
+                                    }
+                                }
+
+                                for (unsigned int iFbxVertex = 0, iActualVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
+                                {
+                                    int& vertexMask = vertexMasks[iFbxVertex];
+                                    if (vertexMask >= 0)
+                                    {
+                                        // meshDeformedVertices contains all fbx points, not just the ones that were filtered by vertexMasks
+
+                                        // vertices
+                                        if (hasTransform)
+                                        {
+                                            const Vector3& glmVect = meshDeformedVertices[iFbxVertex];
+                                            fbxVect.Set(glmVect.x, glmVect.y, glmVect.z);
+                                            // transform vertex in case of local transformation
+                                            fbxVect = nodeTransform.MultT(fbxVect);
+                                            detailPtr->setPos3(pointStartOffset + iActualVertex,
+                                                               UT_Vector3(
+                                                                   (float)fbxVect[0],
+                                                                   (float)fbxVect[1],
+                                                                   (float)fbxVect[2]));
+                                        }
+                                        else
+                                        {
+                                            const Vector3& meshVertex = meshDeformedVertices[iFbxVertex];
+                                            detailPtr->setPos3(pointStartOffset + iActualVertex,
+                                                               UT_Vector3(
+                                                                   meshVertex[0],
+                                                                   meshVertex[1],
+                                                                   meshVertex[2]));
+                                        }
+
+                                        ++iActualVertex;
+                                    }
+                                }
+
                                 if (hasNormals)
                                 {
+                                    FbxAMatrix globalRotate(identityMatrix);
+                                    globalRotate.SetR(nodeTransform.GetR());
+                                    bool hasRotate = globalRotate != identityMatrix;
+
                                     // add normals
                                     GA_Attribute* normalAttr = detailPtr->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
                                     GA_RWHandleV3 normalAttrHandle(normalAttr);
 
                                     // normals are always stored per polygon vertex
                                     int actualIndexByPolyVertex = 0;
-                                    for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                    for (unsigned int iFbxPoly = 0, iFbxNormal = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
                                     {
+                                        int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
                                         if (polygonMasks[iFbxPoly])
                                         {
-                                            int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
-                                            for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                            for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex, ++iFbxNormal)
                                             {
+                                                // meshDeformedNormals contains all fbx normals, not just the ones that were filtered by polygonMasks
                                                 // reverse polygon order
-                                                const glm::Vector3& deformedNormal = meshDeformedNormals[actualIndexByPolyVertex + polySize - 1 - iPolyVertex];
-                                                normalAttrHandle.set(
-                                                    vertexOffset + actualIndexByPolyVertex + iPolyVertex,
-                                                    UT_Vector3F(deformedNormal[0], deformedNormal[1], deformedNormal[2]));
+                                                if (hasRotate)
+                                                {
+                                                    const Vector3& glmVect = meshDeformedNormals[iFbxNormal + polySize - 1 - iPolyVertex];
+                                                    fbxVect.Set(glmVect.x, glmVect.y, glmVect.z);
+                                                    fbxVect = globalRotate.MultT(fbxVect);
+                                                    normalAttrHandle.set(
+                                                        vertexOffset + actualIndexByPolyVertex + iPolyVertex,
+                                                        UT_Vector3F((float)fbxVect[0], (float)fbxVect[1], (float)fbxVect[2]));
+                                                }
+                                                else
+                                                {
+                                                    const glm::Vector3& deformedNormal = meshDeformedNormals[iFbxNormal + polySize - 1 - iPolyVertex];
+                                                    normalAttrHandle.set(
+                                                        vertexOffset + actualIndexByPolyVertex + iPolyVertex,
+                                                        UT_Vector3F(deformedNormal[0], deformedNormal[1], deformedNormal[2]));
+                                                }
                                             }
                                             actualIndexByPolyVertex += polySize;
+                                        }
+                                        else
+                                        {
+                                            iFbxNormal += polySize;
                                         }
                                     }
                                 }
                             }
                             else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
                             {
-                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iMesh]];
+                                for (size_t iVertex = 0; iVertex < vertexCount; ++iVertex)
+                                {
+                                    const glm::Vector3& meshVertex = meshDeformedVertices[iVertex];
+                                    detailPtr->setPos3(pointStartOffset + iVertex,
+                                                       UT_Vector3(
+                                                           meshVertex[0],
+                                                           meshVertex[1],
+                                                           meshVertex[2]));
+                                }
+
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
                                 glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                                 // add normals
