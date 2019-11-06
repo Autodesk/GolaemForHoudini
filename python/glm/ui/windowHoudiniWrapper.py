@@ -5,7 +5,6 @@
 #**************************************************************************
 import os
 import hou
-from glm.Qtpy.Qt import QtWidgets, QtCore
 from glm.ui import windowWrapper
 
 
@@ -45,4 +44,5 @@ class WindowHoudiniWrapper(windowWrapper.WindowWrapper):
     # returns the directory with the icons
     #------------------------------------------------------------------
     def getIconsDir(self):
-        return self._iconsDir
+        thisDirectory = os.path.dirname(os.path.realpath(__file__))
+        return (thisDirectory + '/../../../icons/')
