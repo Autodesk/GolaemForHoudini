@@ -12,7 +12,6 @@ import glm.ui.windowHoudiniWrapper as whw
 from glm.Qtpy.Qt import QtCore, QtWidgets
 import hou
 import sys
-import os
 
 usingDevkit = True
 try:
@@ -49,7 +48,6 @@ def SimCacheLibWindowMain():
         libUI = glmSimCacheLibWindowUIs[0]
     else:
         houWrapper = sclw.SimCacheLibWindowHoudiniWrapper()
-        houWrapper._iconsDir = os.path.join(glmSessionInfo._pluginDir, "icons").replace("\\", "/")
         libUI = scl.SimCacheLibWindow(wrapper=houWrapper)
         libUI.setStyleSheet("background-color: #444444")
         glmSimCacheLibWindowUIs.append(libUI)
@@ -70,7 +68,6 @@ def AboutWindowMain():
         application = QtWidgets.QApplication(sys.argv)
         print("Created QApplication instance: {0}".format(application))
     houWrapper = whw.WindowHoudiniWrapper()
-    houWrapper._iconsDir = os.path.join(glmSessionInfo._pluginDir, "icons").replace("\\", "/")
     abtUI = abt.AboutWindow(wrapper=houWrapper, golaemVersion=glmSessionInfo._version, licenseText=glmSessionInfo._licenseInfo, productName="Golaem for Houdini")
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
@@ -90,9 +87,7 @@ def LayoutEditorWindowMain(layoutFile=""):
         application = QtWidgets.QApplication(sys.argv)
         print("Created QApplication instance: {0}".format(application))
 
-    layoutIconsDir = os.path.join(glmSessionInfo._pluginDir, "icons", "layoutToolv7").replace("\\", "/")
     layoutWrapper = layoutEditorWrapper.getTheLayoutEditorWrapperInstance()
-    layoutWrapper._iconsDir = layoutIconsDir
     layoutEditor = layoutEditorUtils.getTheLayoutEditorInstance(parentWindow=hou.qt.mainWindow(), wrapper=layoutWrapper)
 
     # must override background color, Houdini doesn't set this ?
