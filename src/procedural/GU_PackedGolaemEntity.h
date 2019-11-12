@@ -62,6 +62,8 @@ namespace glm
         GolaemMaterialAssignMode::Value _materialAssignMode;
         glm::GlmString _materialPath;
 
+        bool _isNew;
+
         mutable bool _updateGeo;
         mutable glm::PODArray<GA_Offset> _pointStartOffsets;
         mutable glm::PODArray<GA_Offset> _vertexOffsets; // for geometry generation

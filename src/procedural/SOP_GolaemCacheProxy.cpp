@@ -236,7 +236,7 @@ void SOP_GolaemCacheProxy::buildGolaemCacheChoice(void* thedata, PRM_Name* thech
     {
         const glm::crowdio::SimulationCacheInformation& cacheInfo = simuCacheLibrary.getCacheInformation(iCache);
         PRM_Name& choiceName = thechoicenames[listIdx];
-        choiceName.setTokenAndLabel(cacheInfo._cacheName.c_str(), cacheInfo._cacheName.c_str());
+        choiceName.setTokenAndLabel(cacheInfo._itemName.c_str(), cacheInfo._itemName.c_str());
     }
     thechoicenames[listIdx].setToken(0); // Need a null terminator
 }
@@ -1176,6 +1176,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
             // set the entity id to tell it it's still valid
             packedEntity->_inputData._entityId = entityId;
+            packedEntity->_isNew = entityIsNew;
             if (entityIsNew)
             {
                 //packedEntity->_inputData._dirMapRules // left empty for now
