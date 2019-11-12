@@ -5,7 +5,8 @@
 ***************************************************************************/
 
 #include "GU_PackedGolaemEntity.h"
-#include "GT_PackedGolaemEntity.h"
+//#include "GT_PackedGolaemEntity.h"
+#include "GR_PackedGolaemEntity.h"
 
 HDK_INCLUDES_START
 
@@ -16,6 +17,7 @@ HDK_INCLUDES_START
 #include <UT/UT_MemoryCounter.h>
 #include <FS/UT_DSO.h>
 #include <UT/UT_VarEncode.h>
+#include <DM/DM_RenderTable.h>
 
 HDK_INCLUDES_END
 
@@ -97,6 +99,7 @@ namespace glm
         , _displayMode(GolaemDisplayMode::END)
         , _materialAssignMode(GolaemMaterialAssignMode::END)
         , _materialPath()
+        , _isNew(true)
         , _updateGeo(false)
     {
         GU_Detail* detailPtr = new GU_Detail();
@@ -136,6 +139,7 @@ namespace glm
             _displayMode = src._displayMode;
             _materialAssignMode = src._materialAssignMode;
             _materialPath = src._materialPath;
+            _isNew = src._isNew;
         }
         return *this;
     }
@@ -170,7 +174,16 @@ namespace glm
         if (theGolaemFactory->isRegistered())
         {
             _typeId = theGolaemFactory->typeDef().getId();
-            GT_PackedGolaemEntity::registerPrimitive(_typeId);
+            //GT_PackedGolaemEntity::registerPrimitive(_typeId);
+
+            // Since we're only registering one hook, the priority does not matter.
+            int hookPriority = 0;
+
+            DM_RenderTable::getTable()->registerGEOHook(
+                new GR_PackedGolaemEntityHook(),
+                _typeId,
+                hookPriority,
+                GUI_HOOK_FLAG_NONE);
         }
         else
         {
@@ -605,13 +618,12 @@ namespace glm
                                         // to simplify things, we create a GA_ATTRIB_VERTEX attribute here instead of GA_ATTRIB_POINT
 
                                         int uvIndex;
-                                        int actualIndexByPolyVertex = 0;
-                                        for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                        for (unsigned int iFbxPoly = 0, actualIndexByPolyVertex = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
                                         {
                                             int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
                                             if (polygonMasks[iFbxPoly])
                                             {
-                                                for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex)
+                                                for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex, ++actualIndexByPolyVertex)
                                                 {
                                                     // reverse polygon order
                                                     uvIndex = vertexMasks[fbxMesh->GetPolygonVertex(iFbxPoly, polySize - 1 - iPolyVertex)];
@@ -623,8 +635,6 @@ namespace glm
                                                     uvAttrHandle.set(
                                                         vertexOffset + actualIndexByPolyVertex,
                                                         UT_Vector3F((float)tempUV[0], (float)tempUV[1], 0));
-
-                                                    ++actualIndexByPolyVertex;
                                                 }
                                             }
                                         }
@@ -632,9 +642,7 @@ namespace glm
                                     else
                                     {
                                         int uvIndex;
-                                        int actualIndexByPolyVertex = 0;
-                                        int fbxIndexByPolyVertex = 0;
-                                        for (unsigned int iFbxPoly = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                        for (unsigned int iFbxPoly = 0, actualIndexByPolyVertex = 0, fbxIndexByPolyVertex = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
                                         {
                                             int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
                                             if (polygonMasks[iFbxPoly])
@@ -1075,9 +1083,9 @@ namespace glm
                                     }
                                 }
 
-                                for (unsigned int iFbxVertex = 0, iActualVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
+                                for (unsigned int iFbxVertex = 0; iFbxVertex < fbxVertexCount; ++iFbxVertex)
                                 {
-                                    int& vertexMask = vertexMasks[iFbxVertex];
+                                    int vertexMask = vertexMasks[iFbxVertex];
                                     if (vertexMask >= 0)
                                     {
                                         // meshDeformedVertices contains all fbx points, not just the ones that were filtered by vertexMasks
@@ -1089,7 +1097,7 @@ namespace glm
                                             fbxVect.Set(glmVect.x, glmVect.y, glmVect.z);
                                             // transform vertex in case of local transformation
                                             fbxVect = nodeTransform.MultT(fbxVect);
-                                            detailPtr->setPos3(pointStartOffset + iActualVertex,
+                                            detailPtr->setPos3(pointStartOffset + vertexMask,
                                                                UT_Vector3(
                                                                    (float)fbxVect[0],
                                                                    (float)fbxVect[1],
@@ -1098,14 +1106,12 @@ namespace glm
                                         else
                                         {
                                             const Vector3& meshVertex = meshDeformedVertices[iFbxVertex];
-                                            detailPtr->setPos3(pointStartOffset + iActualVertex,
+                                            detailPtr->setPos3(pointStartOffset + vertexMask,
                                                                UT_Vector3(
                                                                    meshVertex[0],
                                                                    meshVertex[1],
                                                                    meshVertex[2]));
                                         }
-
-                                        ++iActualVertex;
                                     }
                                 }
 
@@ -1120,13 +1126,12 @@ namespace glm
                                     GA_RWHandleV3 normalAttrHandle(normalAttr);
 
                                     // normals are always stored per polygon vertex
-                                    int actualIndexByPolyVertex = 0;
-                                    for (unsigned int iFbxPoly = 0, iFbxNormal = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
+                                    for (unsigned int iFbxPoly = 0, iFbxNormal = 0, actualIndexByPolyVertex = 0; iFbxPoly < fbxPolyCount; ++iFbxPoly)
                                     {
                                         int polySize = fbxMesh->GetPolygonSize(iFbxPoly);
                                         if (polygonMasks[iFbxPoly])
                                         {
-                                            for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex, ++iFbxNormal)
+                                            for (int iPolyVertex = 0; iPolyVertex < polySize; ++iPolyVertex, ++actualIndexByPolyVertex)
                                             {
                                                 // meshDeformedNormals contains all fbx normals, not just the ones that were filtered by polygonMasks
                                                 // reverse polygon order
@@ -1136,23 +1141,19 @@ namespace glm
                                                     fbxVect.Set(glmVect.x, glmVect.y, glmVect.z);
                                                     fbxVect = globalRotate.MultT(fbxVect);
                                                     normalAttrHandle.set(
-                                                        vertexOffset + actualIndexByPolyVertex + iPolyVertex,
+                                                        vertexOffset + actualIndexByPolyVertex,
                                                         UT_Vector3F((float)fbxVect[0], (float)fbxVect[1], (float)fbxVect[2]));
                                                 }
                                                 else
                                                 {
                                                     const glm::Vector3& deformedNormal = meshDeformedNormals[iFbxNormal + polySize - 1 - iPolyVertex];
                                                     normalAttrHandle.set(
-                                                        vertexOffset + actualIndexByPolyVertex + iPolyVertex,
+                                                        vertexOffset + actualIndexByPolyVertex,
                                                         UT_Vector3F(deformedNormal[0], deformedNormal[1], deformedNormal[2]));
                                                 }
                                             }
-                                            actualIndexByPolyVertex += polySize;
                                         }
-                                        else
-                                        {
-                                            iFbxNormal += polySize;
-                                        }
+                                        iFbxNormal += polySize;
                                     }
                                 }
                             }
