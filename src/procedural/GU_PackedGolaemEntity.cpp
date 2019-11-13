@@ -39,6 +39,8 @@ HDK_INCLUDES_END
 
 namespace glm
 {
+    static glm::Mutex _fbxMutex;
+
     GA_PrimitiveTypeId GU_PackedGolaemEntity::_typeId(-1);
 
     //-----------------------------------------------------------------------------
@@ -58,6 +60,7 @@ namespace glm
     //-----------------------------------------------------------------------------
     glm::crowdio::CrowdFBXStorage& getFbxStorage()
     {
+        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
         static glm::crowdio::CrowdFBXStorage fbxStorage;
         return fbxStorage;
     }
@@ -66,6 +69,7 @@ namespace glm
     glm::crowdio::CrowdFBXBaker& getFbxBaker()
     {
         glm::crowdio::CrowdFBXStorage& fbxStorage = getFbxStorage();
+        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
         static glm::crowdio::CrowdFBXBaker fbxBaker(fbxStorage.touchFbxSdkManager());
         return fbxBaker;
     }
