@@ -37,6 +37,7 @@ if(MSVC)
 	set( CROWD_INSTALL_SKIP_DEBUG ON )
 endif()
 
+# name the dll "GolaemHoudini" instead of "glmGolaemHoudini"
 CROWD_INSTALL_RUNTIME_LIBRARY( ${PROJECT_NAME} "procedurals/houdini" "GolaemHoudini")
 
 if(MSVC)

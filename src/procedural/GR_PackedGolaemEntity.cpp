@@ -519,8 +519,6 @@ namespace glm
 
                     size_t meshCount = outputData._meshAssetNameIndices.size();
 
-                    glm::PODArray<int> meshShadingGroups(meshCount, -1);
-
                     glm::Array<glm::Array<glm::Vector3>>& frameDeformedVertices = outputData._deformedVertices[0];
                     int globalVertexCount = 0;
                     int globalPolyCount = 0;
@@ -601,26 +599,6 @@ namespace glm
                                     ++globalVertexCount;
                                 }
                             }
-
-                            const glm::GlmString& meshName = outputData._meshAssetNames[iGeoFileMesh];
-                            int& shadingGroupIdx = meshShadingGroups[iRenderMesh];
-
-                            // find shader assets
-                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iRenderMesh];
-                            int meshAssetIdx = _packedEntity->_character->findMeshAssetIdx(meshName);
-                            if (meshAssetIdx != -1)
-                            {
-                                const glm::MeshAsset& meshAsset = _packedEntity->_character->_meshAssets[meshAssetIdx];
-                                if (iMaterial < meshAsset._shadingGroups.size())
-                                {
-                                    shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
-                                }
-                            }
-
-                            if (shadingGroupIdx == -1)
-                            {
-                                GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
-                            }
                         }
 
                         if (globalVertexCount == 0)
@@ -646,7 +624,7 @@ namespace glm
                             {
                                 continue;
                             }
-                            
+
                             //const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iMesh]];
 
                             // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
@@ -921,8 +899,6 @@ namespace glm
                     {
                         for (size_t iRenderMesh = 0; iRenderMesh < meshCount; ++iRenderMesh)
                         {
-                            size_t iGeoFileMesh = outputData._meshAssetNameIndices[iRenderMesh];
-
                             const glm::Array<glm::Vector3>& meshDeformedVertices = frameDeformedVertices[iRenderMesh];
                             globalVertexCount += meshDeformedVertices.sizeInt();
 
@@ -933,26 +909,6 @@ namespace glm
                             {
                                 uint32_t polySize = assetFileMesh._polygonsVertexCount[iPoly];
                                 globalPolyVertexCount += polySize;
-                            }
-
-                            const glm::GlmString& meshName = outputData._meshAssetNames[iGeoFileMesh];
-                            int& shadingGroupIdx = meshShadingGroups[iRenderMesh];
-
-                            // find shader assets
-                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iRenderMesh];
-                            int meshAssetIdx = _packedEntity->_character->findMeshAssetIdx(meshName);
-                            if (meshAssetIdx != -1)
-                            {
-                                const glm::MeshAsset& meshAsset = _packedEntity->_character->_meshAssets[meshAssetIdx];
-                                if (iMaterial < meshAsset._shadingGroups.size())
-                                {
-                                    shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
-                                }
-                            }
-
-                            if (shadingGroupIdx == -1)
-                            {
-                                GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
                             }
                         }
 
@@ -1055,7 +1011,6 @@ namespace glm
 
                             globalVertexCount += (int)vertexCount;
 
-                            
                             //GA_Size actualPolyCount = polyCounts.getNumPolygons();
 
                             //GA_Attribute* meshAttr = detailPtr->addStringTuple(GA_ATTRIB_PRIMITIVE, getMeshAttrName().c_str(), 1);
@@ -1205,7 +1160,6 @@ namespace glm
 
                         _viewportGeo->connectIndexedPrims(rend, RE_GEO_WIRE_IDX, RE_PRIM_LINES, lineConnect.sizeInt(), lineConnect.begin(), NULL, false);
                         _viewportGeo->connectIndexedPrims(rend, RE_GEO_SHADED_IDX, polyArray, NULL, false);
-
                     }
                     else
                     {
@@ -1542,8 +1496,7 @@ namespace glm
                             normals->setCacheVersion(params.geo_version);
                         }
                     }
-
-                    if (outputData._geoType == glm::crowdio::GeometryType::GCG)
+                    else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
                     {
                         // Fetch P (point position). If its cache version matches, no upload is required.
                         // if _viewportGeo->getNumPoints() is 0, the line below will crash

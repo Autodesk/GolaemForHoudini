@@ -109,14 +109,8 @@ namespace glm
         GU_Detail* detailPtr = new GU_Detail();
         _detail.allocateAndSet(detailPtr, true);
 
-        _inputData._enableLOD = false;
-        _inputData._entityPos = NULL;              // not used when enableLOD is false
-        _inputData._cameraWorldPosition = NULL;    // not used when enableLOD is false
-        _inputData._maxVerticesPerFace = UINT_MAX; // for fbx assets
-        _inputData._generateFur = false;           // do not generate fur for now
         _inputData._frameDatas.resize(1, NULL);
         _inputData._frames.resize(1);
-
         _inputData._fbxStorage = &getFbxStorage();
         _inputData._fbxBaker = &getFbxBaker();
     }
@@ -470,31 +464,6 @@ namespace glm
                         size_t meshCount = outputData._meshAssetNameIndices.size();
                         _pointStartOffsets.resize(meshCount);
 
-                        glm::PODArray<int> meshShadingGroups(meshCount, -1);
-
-                        for (size_t iRenderMesh = 0; iRenderMesh < meshCount; ++iRenderMesh)
-                        {
-                            const glm::GlmString& meshName = outputData._meshAssetNames[outputData._meshAssetNameIndices[iRenderMesh]];
-                            int& shadingGroupIdx = meshShadingGroups[iRenderMesh];
-
-                            // find shader assets
-                            unsigned int iMaterial = outputData._meshAssetMaterialIndices[iRenderMesh];
-                            int meshAssetIdx = _character->findMeshAssetIdx(meshName);
-                            if (meshAssetIdx != -1)
-                            {
-                                const glm::MeshAsset& meshAsset = _character->_meshAssets[meshAssetIdx];
-                                if (iMaterial < meshAsset._shadingGroups.size())
-                                {
-                                    shadingGroupIdx = meshAsset._shadingGroups[iMaterial];
-                                }
-                            }
-
-                            if (shadingGroupIdx == -1)
-                            {
-                                GLM_CROWD_TRACE_WARNING_LIMIT("No Shading Group found for mesh " << meshName << ". Using default material shader instead");
-                            }
-                        }
-
                         glm::Array<glm::Array<glm::Vector3>>& frameDeformedVertices = outputData._deformedVertices[0];
 
                         _vertexOffsets.resize(meshCount);
@@ -757,7 +726,7 @@ namespace glm
                             GA_Attribute* materialAttr = detailPtr->addStringTuple(GA_ATTRIB_PRIMITIVE, GEO_STD_ATTRIB_MATERIAL, 1);
                             GA_RWHandleS materialAttrHandle(materialAttr);
 
-                            int shadingGroupIdx = meshShadingGroups[iRenderMesh];
+                            int shadingGroupIdx = outputData._meshShadingGroups[iRenderMesh];
                             glm::GlmString materialName = "";
                             if (shadingGroupIdx >= 0)
                             {
