@@ -1183,7 +1183,7 @@ namespace glm
 
             {
                 RE_VertexArray* pointIds = _viewportGeo->findCachedAttrib(rend, "pointID", RE_GPU_INT32, 1, RE_ARRAY_POINT, true);
-                if (pointIds->getCacheVersion() != params.geo_version)
+                if (pointIds != NULL && pointIds->getCacheVersion() != params.geo_version)
                 {
                     // map() returns a pointer to the GL buffer
                     int* pointIdsData = static_cast<int*>(pointIds->map(rend));
