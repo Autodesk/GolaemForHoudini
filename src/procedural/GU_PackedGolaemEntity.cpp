@@ -75,6 +75,16 @@ namespace glm
     }
 
     //-----------------------------------------------------------------------------
+    UT_StringHolder sanitizeName(const UT_StringHolder& name)
+    {
+#if GLM_HOUDINI_VERSION < 180000
+        return UT_VarEncode::encode(name);
+#else
+        return UT_VarEncode::encodeVar(name);
+#endif
+    }
+
+    //-----------------------------------------------------------------------------
     class GU_PackedGolaemFactory : public GU_PackedFactory
     {
     public:
@@ -87,6 +97,15 @@ namespace glm
         {
             return new GU_PackedGolaemEntity();
         }
+
+#if GLM_HOUDINI_VERSION >= 180000
+        const UT_IntrusivePtr<GU_PackedImpl>& defaultImpl() const override
+        {
+            return _defaultImpl;
+        }
+
+        UT_IntrusivePtr<GU_PackedImpl> _defaultImpl = new GU_PackedGolaemEntity();
+#endif
     };
 
     static GU_PackedGolaemFactory* theGolaemFactory = NULL;
@@ -766,7 +785,7 @@ namespace glm
                                 {
                                     int shAttrIdx = shGroup._shaderAttributes[iShAttr];
                                     const glm::ShaderAttribute& shAttr = _character->_shaderAttributes[shAttrIdx];
-                                    UT_StringHolder attrName = UT_VarEncode::encode(shAttr._name.c_str());
+                                    UT_StringHolder attrName = sanitizeName(shAttr._name.c_str());
                                     GA_Attribute* attr = NULL;
                                     switch (shAttr._type)
                                     {
