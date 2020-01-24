@@ -1118,12 +1118,20 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
             {
                 GU_PrimPacked* packedPrim = static_cast<GU_PrimPacked*>(prim);
+#if GLM_HOUDINI_VERSION < 180000
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+#else
+                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
+#endif
             }
             else
             {
                 GU_PrimPacked* packedPrim = GU_PrimPacked::build(*gdp, glm::GU_PackedGolaemEntity::getTypeId());
+#if GLM_HOUDINI_VERSION < 180000
                 packedEntity = static_cast<glm ::GU_PackedGolaemEntity*>(packedPrim->implementation());
+#else
+                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
+#endif
                 prim = packedPrim;
             }
             bool entityIsNew = packedEntity->_inputData._entityId == -1;
