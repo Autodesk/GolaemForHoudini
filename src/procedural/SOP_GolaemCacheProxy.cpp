@@ -949,8 +949,8 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     if (UTgetHDKAPIVersion() != HDK_API_VERSION)
     {
         GLM_CROWD_TRACE_ERROR(
-            "GolaemForHoudini was built against the Houdini toolkit version '" << HDK_API_VERSION 
-            << "', which incompatible with the current Houdini toolkit version: '" << UTgetHDKAPIVersion() << "'."
+            "GolaemForHoudini was built against the Houdini toolkit version '"
+            << HDK_API_VERSION << "', which incompatible with the current Houdini toolkit version: '" << UTgetHDKAPIVersion() << "'."
             << " This version of Houdini is not supported. Unexpected errors or crashes might occur.");
     }
 
@@ -1127,7 +1127,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
             {
                 GU_PrimPacked* packedPrim = static_cast<GU_PrimPacked*>(prim);
-#if HDK_API_VERSION < 180000
+#if HDK_API_VERSION < 18000000
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
 #else
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
@@ -1136,7 +1136,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             else
             {
                 GU_PrimPacked* packedPrim = GU_PrimPacked::build(*gdp, glm::GU_PackedGolaemEntity::getTypeId());
-#if HDK_API_VERSION < 180000
+#if HDK_API_VERSION < 18000000
                 packedEntity = static_cast<glm ::GU_PackedGolaemEntity*>(packedPrim->implementation());
 #else
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
