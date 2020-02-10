@@ -99,7 +99,7 @@ namespace glm
             return new GU_PackedGolaemEntity();
         }
 
-#if HDK_API_VERSION >= 180000
+#if HDK_API_VERSION >= 18000000
         const UT_IntrusivePtr<GU_PackedImpl>& defaultImpl() const override
         {
             return _defaultImpl;
