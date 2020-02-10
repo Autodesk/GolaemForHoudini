@@ -15,6 +15,7 @@ HDK_INCLUDES_START
 #include <GU/GU_PackedFactory.h>
 #include <GU/GU_PrimPacked.h>
 #include <UT/UT_MemoryCounter.h>
+#include <UT/UT_HDKVersion.h>
 #include <FS/UT_DSO.h>
 #include <UT/UT_VarEncode.h>
 #include <DM/DM_RenderTable.h>
@@ -77,7 +78,7 @@ namespace glm
     //-----------------------------------------------------------------------------
     UT_StringHolder sanitizeName(const UT_StringHolder& name)
     {
-#if GLM_HOUDINI_VERSION < 180000
+#if HDK_API_VERSION < 18000000
         return UT_VarEncode::encode(name);
 #else
         return UT_VarEncode::encodeVar(name);
@@ -98,7 +99,7 @@ namespace glm
             return new GU_PackedGolaemEntity();
         }
 
-#if GLM_HOUDINI_VERSION >= 180000
+#if HDK_API_VERSION >= 180000
         const UT_IntrusivePtr<GU_PackedImpl>& defaultImpl() const override
         {
             return _defaultImpl;
