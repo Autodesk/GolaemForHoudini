@@ -14,6 +14,7 @@ HDK_INCLUDES_START
 #include <RE/RE_VertexArray.h>
 #include <RE/RE_ShaderHandle.h>
 #include <RE/RE_Render.h>
+#include <UT/UT_HDKVersion.h>
 #include <RE/RE_LightList.h>
 #include <GR/GR_Utils.h>
 #include <RE/RE_ElementArray.h>
@@ -148,7 +149,12 @@ namespace glm
     {
         const GT_GEOPrimitive* geoPrim = static_cast<const GT_GEOPrimitive*>(primh.get());
         const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(geoPrim->getPrimitive(0));
-        const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+
+#if HDK_API_VERSION >= 18050000
+        const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
+#else
+		const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+#endif
         assignEntity(packedEntity);
 
         if (_packedEntity->_inputData._entityId == -1)
