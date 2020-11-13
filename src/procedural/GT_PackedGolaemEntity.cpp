@@ -13,6 +13,7 @@ HDK_INCLUDES_START
 #include <GT/GT_TransformArray.h>
 #include <GT/GT_GEOAttributeFilter.h>
 #include <GT/GT_PrimInstance.h>
+#include <UT/UT_HDKVersion.h>
 #include <GT/GT_GEOPrimPacked.h>
 #include <GT/GT_PrimCollect.h>
 
@@ -59,8 +60,12 @@ namespace glm
         const GEO_Primitive* prim = prim_list[0];
         if (prim != NULL && prim->getTypeId() == GU_PackedGolaemEntity::getTypeId())
         {
-            const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(prim);
-            const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+			const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(prim);
+#if HDK_API_VERSION >= 18050000        
+            const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
+#else
+			const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+#endif
             if (packedEntity->_inputData._entityId != -1)
             {
                 if (packedEntity->_viewportGeo.get() == NULL)
