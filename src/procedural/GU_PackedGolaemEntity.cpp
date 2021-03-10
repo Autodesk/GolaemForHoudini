@@ -397,13 +397,13 @@ namespace glm
                     GA_Offset& pointStartOffset = _pointStartOffsets[0];
                     pointStartOffset = detailPtr->appendPointBlock(boneCount);
 
-                    const glm::PODArray<glm::HierarchicalBone*>& hBones = _character->_converterMapping._skeletonDescription->getBones();
+                    const glm::PODArray<glm::HierarchicalBoneV1*>& hBones = _character->_converterMapping._skeletonDescription->getBones();
                     const glm::PODArray<size_t>& sortedBones = _character->_converterMapping._skeletonDescription->getSortedBones();
 
                     for (int iBone = 0, primCount = glm::min(sortedBones.sizeInt(), (int)boneCount); iBone < primCount; ++iBone)
                     {
-                        const glm::HierarchicalBone* hBone = hBones[sortedBones[iBone]];
-                        const glm::HierarchicalBone* hBoneParent = hBone->getFather();
+                        const glm::HierarchicalBoneV1* hBone = hBones[sortedBones[iBone]];
+                        const glm::HierarchicalBoneV1* hBoneParent = hBone->getFather();
                         if (hBoneParent == NULL)
                         {
                             continue;
@@ -439,7 +439,7 @@ namespace glm
                     for (size_t iShaderAttr = 0, shaderAttrCount = _character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
                     {
                         const glm::GlmString& attrValueStr = shaderData[iShaderAttr];
-                        const glm::ShaderAttribute& shaderAttr = _character->_shaderAttributes[iShaderAttr];
+                        const glm::ShaderAttributeV2& shaderAttr = _character->_shaderAttributes[iShaderAttr];
                         switch (shaderAttr._type)
                         {
                         case glm::ShaderAttributeType::INT:
@@ -750,7 +750,7 @@ namespace glm
                             glm::GlmString materialName = "";
                             if (shadingGroupIdx >= 0)
                             {
-                                const glm::ShadingGroup& shGroup = _character->_shadingGroups[shadingGroupIdx];
+                                const glm::ShadingGroupV1& shGroup = _character->_shadingGroups[shadingGroupIdx];
                                 materialName = _materialPath;
                                 materialName.rtrim("/");
                                 materialName += "/";
@@ -767,7 +767,7 @@ namespace glm
                                     int shaderAssetIdx = (*_shadingGroupToSurfaceShader)[shadingGroupIdx];
                                     if (shaderAssetIdx >= 0)
                                     {
-                                        const glm::ShaderAsset& shAsset = _character->_shaderAssets[shaderAssetIdx];
+                                        const glm::ShaderAssetV1& shAsset = _character->_shaderAssets[shaderAssetIdx];
                                         materialName += shAsset._name;
                                     }
                                     else
@@ -785,7 +785,7 @@ namespace glm
                                 for (size_t iShAttr = 0, shAttrCount = shGroup._shaderAttributes.size(); iShAttr < shAttrCount; ++iShAttr)
                                 {
                                     int shAttrIdx = shGroup._shaderAttributes[iShAttr];
-                                    const glm::ShaderAttribute& shAttr = _character->_shaderAttributes[shAttrIdx];
+                                    const glm::ShaderAttributeV2& shAttr = _character->_shaderAttributes[shAttrIdx];
                                     UT_StringHolder attrName = sanitizeName(shAttr._name.c_str());
                                     GA_Attribute* attr = NULL;
                                     switch (shAttr._type)
