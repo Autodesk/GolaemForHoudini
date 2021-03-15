@@ -153,7 +153,7 @@ namespace glm
 #if HDK_API_VERSION >= 18050000
         const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
 #else
-		const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
+        const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
 #endif
         assignEntity(packedEntity);
 

@@ -21,7 +21,9 @@ HDK_INCLUDES_END
 
 namespace glm
 {
-    class GolaemCharacter;
+    class GolaemCharacterV15;
+    typedef GolaemCharacterV15 GolaemCharacter;
+
     struct ShaderAssetDataContainer;
 
     struct GolaemDisplayMode
