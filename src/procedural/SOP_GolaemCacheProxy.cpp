@@ -1204,7 +1204,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                 // compute the bounding box of the current entity
                 glm::Vector3 halfExtents(1, 1, 1);
-                const glm::GeometryAsset* geoAsset = character->getGeometryAsset(geoTag, 0); // any LOD should have same extents !
+                size_t geoIdx = 0;
+                const glm::GeometryAsset* geoAsset = character->getGeometryAsset(geoTag, geoIdx); // any LOD should have same extents !
                 if (geoAsset != NULL)
                 {
                     halfExtents = geoAsset->_halfExtentsYUp;
