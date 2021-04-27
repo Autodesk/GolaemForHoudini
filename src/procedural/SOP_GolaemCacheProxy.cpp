@@ -1110,10 +1110,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         }
         const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
 
-        glm::PODArray<int64_t> excludedEntities;
-        glm::Array<const glm::crowdio::glmHistoryRuntimeStructure*> historyStructures;
-        cachedSimulation.getHistoryRuntimeStructures(historyStructures);
-        glm::crowdio::createEntityExclusionList(excludedEntities, cachedSimulation.getSrcSimulationData(), _factory.getLayoutHistories(), historyStructures);
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
         for (uint32_t iEntity = 0; iEntity < simuData->_entityCount; ++iEntity, ++primitiveIndex)
         {
@@ -1159,11 +1155,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             if (!excludedEntity)
             {
                 excludedEntity = iEntity >= maxEntities;
-                if (!excludedEntity)
-                {
-                    size_t excludedEntityIdx;
-                    excludedEntity = glm::glmFindIndex(excludedEntities.begin(), excludedEntities.end(), entityId, excludedEntityIdx);
-                }
             }
 
             if (excludedEntity)
