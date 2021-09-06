@@ -66,7 +66,7 @@ def AboutWindowMain():
     devkit.initGolaem()
     golaemVersion = devkit.getGolaemVersionString().rstrip()
     golaemLicense = devkit.getGolaemLicenseString()
-    if (devkit.usingGolaemLayoutLicense()):
+    if (devkit.usingGolaemLiteLicense()):
         golaemLicense = '1;' + golaemLicense
     else:
         golaemLicense = '0;' + golaemLicense
