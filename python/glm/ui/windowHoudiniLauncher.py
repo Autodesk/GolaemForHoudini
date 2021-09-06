@@ -15,17 +15,10 @@ import sys
 
 usingDevkit = True
 try:
-    from glm.devkit import *
+    import glm.devkit as devkit
 except:
     usingDevkit = False
 
-class GolaemSessionInformation(object):
-    def __init__(self):
-        self._pluginDir = ""
-        self._version = ""
-        self._licenseInfo = "0;Invalid license"
-
-glmSessionInfo = GolaemSessionInformation()
 
 # **********************************************************************
 #
@@ -33,12 +26,13 @@ glmSessionInfo = GolaemSessionInformation()
 #
 # **********************************************************************
 glmSimCacheLibWindowUIs = []
+
+
 # ------------------------------------------------------------------
 # SimCacheLibWindowMain
 # ------------------------------------------------------------------
 def SimCacheLibWindowMain():
     global glmSimCacheLibWindowUIs
-    global glmSessionInfo
     application = None
     libUI = None
     if not QtWidgets.QApplication.instance():
@@ -61,14 +55,27 @@ def SimCacheLibWindowMain():
 # AboutWindowMain
 # ------------------------------------------------------------------
 def AboutWindowMain():
-    global glmSessionInfo
     application = None
     abtUI = None
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
         print("Created QApplication instance: {0}".format(application))
+
+    # Fetch license data
+    devkit.initGolaemProduct("GolaemForHoudini", None)
+    devkit.initGolaem()
+    golaemVersion = devkit.getGolaemVersionString().rstrip()
+    golaemLicense = devkit.getGolaemLicenseString()
+    if (devkit.usingGolaemLayoutLicense()):
+        golaemLicense = '1;' + golaemLicense
+    else:
+        golaemLicense = '0;' + golaemLicense
+    devkit.finishGolaem()
+    devkit.finishGolaemProduct()
+
     houWrapper = whw.WindowHoudiniWrapper()
-    abtUI = abt.AboutWindow(wrapper=houWrapper, golaemVersion=glmSessionInfo._version, licenseText=glmSessionInfo._licenseInfo, productName="Golaem for Houdini")
+    abtUI = abt.AboutWindow(wrapper=houWrapper, golaemVersion=golaemVersion,
+                            licenseText=golaemLicense, productName="Golaem for Houdini")
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
     abtUI.setWindowState(abtUI.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
@@ -80,7 +87,6 @@ def AboutWindowMain():
 # LayoutEditorWindowMain
 # ------------------------------------------------------------------
 def LayoutEditorWindowMain(layoutFile=""):
-    global glmSessionInfo
     application = None
     layoutEditor = None
     if not QtWidgets.QApplication.instance():
@@ -98,4 +104,3 @@ def LayoutEditorWindowMain(layoutFile=""):
     layoutEditor.editorMainWindow.setWindowState(layoutEditor.editorMainWindow.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
     layoutEditor.editorMainWindow.activateWindow()
     return layoutEditor
-
