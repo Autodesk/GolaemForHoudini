@@ -986,24 +986,6 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     UT_Exit::addExitCallback(glmDsoExit);
 
     table->addOperator(op);
-
-    glm::GlmString licenseInfo = glm::crowdio::getLicenseRLMString();
-    if (glm::crowdio::hasLayoutLicenseFeatures())
-    {
-        licenseInfo = "1;" + licenseInfo;
-    }
-    else
-    {
-        licenseInfo = "0;" + licenseInfo;
-    }
-
-    // init python session structure
-    glm::GlmString pythonCommand = "import glm.ui.windowHoudiniLauncher as launcher\n";
-    pythonCommand += glm::GlmString("launcher.glmSessionInfo._pluginDir=\"") + pluginDir + "\"\n";
-    pythonCommand += glm::GlmString("launcher.glmSessionInfo._version=\"") + glm::crowdio::getGolaemVersion() + "\"\n";
-    pythonCommand += glm::GlmString("launcher.glmSessionInfo._licenseInfo=\"") + licenseInfo + "\"\n";
-
-    PYrunPythonStatements(pythonCommand.c_str());
 }
 
 /// Register new geometry primitive
