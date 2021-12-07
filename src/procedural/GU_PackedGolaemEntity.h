@@ -18,12 +18,10 @@ HDK_INCLUDES_END
 #include <glmVector3.h>
 #include <glmString.h>
 #include <glmRenderGeometry.h>
+#include <glmGolaemCharacter.h>	//predefining GolaemCharacter coudl be enough, but as it's a typedef on a versionned class, importing the file make sures the typedef is consistant
 
 namespace glm
 {
-    class GolaemCharacterV16;
-    typedef GolaemCharacterV16 GolaemCharacter;
-
     struct ShaderAssetDataContainer;
 
     struct GolaemDisplayMode
