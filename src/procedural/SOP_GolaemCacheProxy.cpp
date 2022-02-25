@@ -929,16 +929,12 @@ static void glmDsoExit(void* data)
     glm::crowdio::finish();
     glm::theGolaemLogger::destroy();
     glm::finishCore();
-
-    glm::setDefaultAllocator(NULL);
 }
 
 // register new sop
 //-----------------------------------------------------------------------------
 void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 {
-    glm::useCoreDefaultAllocator();
-
     glm::initCore(); // inits logs
     glm::getLog()->_logSeverity[glm::Log::CROWD] = glm::Log::LOG_WARNING;
     glm::getLog()->_logSeverity[glm::Log::SDK] = glm::Log::LOG_ERROR;

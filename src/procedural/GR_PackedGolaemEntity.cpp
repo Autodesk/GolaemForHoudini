@@ -78,7 +78,7 @@ namespace glm
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::clearGeo()
     {
-        GLM_SAFE_DELETE(_viewportGeo);
+		GLM_SAFE_DELETE_NOPROFILING(_viewportGeo);
     }
 
     //-----------------------------------------------------------------------------
