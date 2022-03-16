@@ -1706,10 +1706,17 @@ namespace glm
                     drawparams.opts->getLightList()->bindForShader(rend, shader);
                 }
 
+#if HDK_API_VERSION >= 19000000
                 // set up the main material block for GL3
+                mat->updateShaderForMaterial(
+                    rend, 0, true,
+                    RE_SHADER_TARGET_TRIANGLE, shader);
+#else
                 mat->updateShaderForMaterial(
                     rend, 0, true, true,
                     RE_SHADER_TARGET_TRIANGLE, shader);
+#endif
+
             }
 
             // Draw call for the geometry
