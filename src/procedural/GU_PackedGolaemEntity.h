@@ -53,7 +53,6 @@ namespace glm
         glm::crowdio::InputEntityGeoData _inputData; // for geometry generation
         const glm::GolaemCharacter* _character;
         glm::PODArray<size_t>* _sortedBonesInverse;
-        const glm::ShaderAssetDataContainer* _shaderDataContainer;
         glm::PODArray<int>* _shadingGroupToSurfaceShader;
 
         mutable uint32_t _bonePositionOffset; // computed when needed

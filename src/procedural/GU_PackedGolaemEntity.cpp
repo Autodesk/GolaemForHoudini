@@ -118,7 +118,6 @@ namespace glm
         , _inputData()
         , _character(NULL)
         , _sortedBonesInverse(NULL)
-        , _shaderDataContainer(NULL)
         , _shadingGroupToSurfaceShader(NULL)
         , _displayMode(GolaemDisplayMode::END)
         , _materialAssignMode(GolaemMaterialAssignMode::END)
@@ -152,7 +151,6 @@ namespace glm
             _inputData = src._inputData;
             _character = src._character;
             _sortedBonesInverse = src._sortedBonesInverse;
-            _shaderDataContainer = src._shaderDataContainer;
             _shadingGroupToSurfaceShader = src._shadingGroupToSurfaceShader;
             _displayMode = src._displayMode;
             _materialAssignMode = src._materialAssignMode;
@@ -330,7 +328,7 @@ namespace glm
                 GEO_PolyCounts polyCounts;
                 UT_IntArray polygonpointnumbers;
 
-                const glm::crowdio::GlmSimulationData* simuData = _inputData._cachedSimulation->getFinalSimulationData();
+                const glm::crowdio::GlmSimulationData* simuData = _inputData._simuData;
 
                 uint16_t entityType = simuData->_entityTypes[_inputData._entityIndex];
                 uint16_t boneCount = simuData->_boneCount[entityType];
@@ -424,7 +422,7 @@ namespace glm
                 case glm::GolaemDisplayMode::SKINMESH:
                 {
                     // compute shaders
-                    const glm::Array<glm::GlmString>& shaderData = _shaderDataContainer->data[_inputData._entityIndex];
+                    const glm::Array<glm::GlmString>& shaderData = *_inputData._shaderData;
 
                     glm::GlmMap<size_t, size_t> globalToIntShaderAttrIdx;
                     glm::GlmMap<size_t, size_t> globalToFloatShaderAttrIdx;
@@ -940,7 +938,7 @@ namespace glm
                 case glm::GolaemDisplayMode::SKELETON:
                 {
                     const GA_Offset& pointStartOffset = _pointStartOffsets[0];
-                    const glm::crowdio::GlmSimulationData* simuData = _inputData._cachedSimulation->getFinalSimulationData();
+                    const glm::crowdio::GlmSimulationData* simuData = _inputData._simuData;
                     const glm::crowdio::GlmFrameData* frameData = _inputData._frameDatas[0];
                     // set the bone positions
                     uint16_t entityType = simuData->_entityTypes[_inputData._entityIndex];
