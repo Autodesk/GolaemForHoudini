@@ -97,10 +97,10 @@ def LayoutEditorWindowMain(layoutFile=""):
     layoutEditor = layoutEditorUtils.getTheLayoutEditorInstance(parentWindow=hou.qt.mainWindow(), wrapper=layoutWrapper)
 
     # must override background color, Houdini doesn't set this ?
-    layoutEditor.editorMainWindow.setStyleSheet("background-color: #444444")
+    layoutEditor.setStyleSheet("background-color: #444444")
     if layoutFile:
         layoutEditor.openLayoutFile(layoutFile)
     layoutEditor.show()
-    layoutEditor.editorMainWindow.setWindowState(layoutEditor.editorMainWindow.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
-    layoutEditor.editorMainWindow.activateWindow()
+    layoutEditor.setWindowState(layoutEditor.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
+    layoutEditor.activateWindow()
     return layoutEditor
