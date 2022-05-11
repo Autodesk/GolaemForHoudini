@@ -1081,6 +1081,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         {
             continue;
         }
+        const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getFinalEntityAssets(currentFrame);
         const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
 
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
@@ -1158,13 +1159,22 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             // set the entity id to tell it it's still valid
             packedEntity->_inputData._entityId = entityId;
             packedEntity->_isNew = entityIsNew;
+            packedEntity->_inputData._frameDatas[0] = frameData;
+            packedEntity->_inputData._frames[0] = (double)currentFrame;
+            packedEntity->_inputData._shaderData = &shaderDataContainer->data[iEntity];
             if (entityIsNew)
             {
                 //packedEntity->_inputData._dirMapRules // left empty for now
                 packedEntity->_inputData._entityIndex = iEntity;
                 packedEntity->_character = character;
                 packedEntity->_inputData._geometryTag = geoTag;
-                packedEntity->_inputData._cachedSimulation = &cachedSimulation;
+                packedEntity->_inputData._simuData = simuData;
+
+                packedEntity->_inputData._characterIdx = characterIdx;
+                packedEntity->_inputData._character = character;
+
+                // compute assets if needed
+                packedEntity->_inputData._assets = &entityAssets[packedEntity->_inputData._entityIndex];
 
                 // compute the bounding box of the current entity
                 glm::Vector3 halfExtents(1, 1, 1);
@@ -1192,9 +1202,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             float* rootPos = frameData->_bonePositions[positionOffset];
 
             packedEntity->_rootPos.setValues(rootPos);
-            packedEntity->_shaderDataContainer = shaderDataContainer;
-            packedEntity->_inputData._frameDatas[0] = frameData;
-            packedEntity->_inputData._frames[0] = (double)currentFrame;
             packedEntity->_updateGeo = true;
         }
     }

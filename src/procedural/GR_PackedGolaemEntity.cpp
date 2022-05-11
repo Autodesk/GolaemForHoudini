@@ -420,7 +420,7 @@ namespace glm
             break;
             case GolaemDisplayMode::SKELETON:
             {
-                const glm::crowdio::GlmSimulationData* simuData = _packedEntity->_inputData._cachedSimulation->getFinalSimulationData();
+                const glm::crowdio::GlmSimulationData* simuData = _packedEntity->_inputData._simuData;
 
                 uint16_t entityType = simuData->_entityTypes[_packedEntity->_inputData._entityIndex];
                 uint16_t boneCount = simuData->_boneCount[entityType];
@@ -1280,7 +1280,7 @@ namespace glm
                     // map() returns a pointer to the GL buffer
                     UT_Vector3F* pointData = static_cast<UT_Vector3F*>(pos->map(rend));
 
-                    const glm::crowdio::GlmSimulationData* simuData = _packedEntity->_inputData._cachedSimulation->getFinalSimulationData();
+                    const glm::crowdio::GlmSimulationData* simuData = _packedEntity->_inputData._simuData;
                     const glm::crowdio::GlmFrameData* frameData = _packedEntity->_inputData._frameDatas[0];
                     // set the bone positions
                     uint16_t entityType = simuData->_entityTypes[_packedEntity->_inputData._entityIndex];
