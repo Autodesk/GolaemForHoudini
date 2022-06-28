@@ -1,8 +1,8 @@
 /***************************************************************************
-*                                                                          *
-*  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
-*                                                                          *
-***************************************************************************/
+ *                                                                          *
+ *  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
+ *                                                                          *
+ ***************************************************************************/
 
 #include "GU_PackedGolaemEntity.h"
 //#include "GT_PackedGolaemEntity.h"
@@ -190,7 +190,7 @@ namespace glm
         if (theGolaemFactory->isRegistered())
         {
             _typeId = theGolaemFactory->typeDef().getId();
-            //GT_PackedGolaemEntity::registerPrimitive(_typeId);
+            // GT_PackedGolaemEntity::registerPrimitive(_typeId);
 
             // Since we're only registering one hook, the priority does not matter.
             int hookPriority = 0;
@@ -422,59 +422,14 @@ namespace glm
                 case glm::GolaemDisplayMode::SKINMESH:
                 {
                     // compute shaders
-                    const glm::Array<glm::GlmString>& shaderData = *_inputData._shaderData;
+                    const ShaderAssetDataContainer* shaderDataContainer = _inputData._shaderDataContainer;
 
-                    glm::GlmMap<size_t, size_t> globalToIntShaderAttrIdx;
-                    glm::GlmMap<size_t, size_t> globalToFloatShaderAttrIdx;
-                    glm::GlmMap<size_t, size_t> globalToStringShaderAttrIdx;
-                    glm::GlmMap<size_t, size_t> globalToVectorShaderAttrIdx;
+                    const glm::PODArray<int>& entityIntShaderData = shaderDataContainer->intData[_inputData._entityIndex];
+                    const glm::PODArray<float>& entityFloatShaderData = shaderDataContainer->floatData[_inputData._entityIndex];
+                    const glm::Array<glm::Vector3>& entityVectorShaderData = shaderDataContainer->vectorData[_inputData._entityIndex];
+                    const glm::Array<glm::GlmString>& entityStringShaderData = shaderDataContainer->stringData[_inputData._entityIndex];
 
-                    glm::PODArray<int> intAttrValues;
-                    glm::PODArray<float> floatAttrValues;
-                    glm::Array<glm::GlmString> stringAttrValues;
-                    glm::Array<glm::Vector3> vectorAttrValues;
-
-                    for (size_t iShaderAttr = 0, shaderAttrCount = _character->_shaderAttributes.size(); iShaderAttr < shaderAttrCount; iShaderAttr++)
-                    {
-                        const glm::GlmString& attrValueStr = shaderData[iShaderAttr];
-                        const glm::ShaderAttribute& shaderAttr = _character->_shaderAttributes[iShaderAttr];
-                        switch (shaderAttr._type)
-                        {
-                        case glm::ShaderAttributeType::INT:
-                        {
-
-                            globalToIntShaderAttrIdx[iShaderAttr] = intAttrValues.size();
-                            intAttrValues.addOne();
-                            glm::fromString<int>(attrValueStr, intAttrValues.back());
-                        }
-                        break;
-                        case glm::ShaderAttributeType::FLOAT:
-                        {
-
-                            globalToFloatShaderAttrIdx[iShaderAttr] = floatAttrValues.size();
-                            floatAttrValues.addOne();
-                            glm::fromString<float>(attrValueStr, floatAttrValues.back());
-                        }
-                        break;
-                        case glm::ShaderAttributeType::STRING:
-                        {
-
-                            globalToStringShaderAttrIdx[iShaderAttr] = stringAttrValues.size();
-                            stringAttrValues.addOne();
-                            stringAttrValues.back() = attrValueStr;
-                        }
-                        break;
-                        case glm::ShaderAttributeType::VECTOR:
-                        {
-                            globalToVectorShaderAttrIdx[iShaderAttr] = vectorAttrValues.size();
-                            vectorAttrValues.addOne();
-                            glm::fromString(attrValueStr, vectorAttrValues.back());
-                        }
-                        break;
-                        default:
-                            break;
-                        }
-                    }
+                    const PODArray<size_t>& globalToSpecificShaderAttrIdx = shaderDataContainer->globalToSpecificShaderAttrIdxPerChar[_inputData._characterIdx];
 
                     geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
                     if (geoStatus == glm::crowdio::GIO_SUCCESS)
@@ -784,6 +739,7 @@ namespace glm
                                 {
                                     int shAttrIdx = shGroup._shaderAttributes[iShAttr];
                                     const glm::ShaderAttribute& shAttr = _character->_shaderAttributes[shAttrIdx];
+                                    size_t specificAttrIdx = globalToSpecificShaderAttrIdx[shAttrIdx];
                                     UT_StringHolder attrName = sanitizeName(shAttr._name.c_str());
                                     GA_Attribute* attr = NULL;
                                     switch (shAttr._type)
@@ -794,8 +750,7 @@ namespace glm
                                         GA_RWHandleI attrHandle(attr);
                                         if (attrHandle.isValid())
                                         {
-                                            size_t attrValueIdx = globalToIntShaderAttrIdx[iShAttr];
-                                            int attrValue = intAttrValues[attrValueIdx];
+                                            int attrValue = entityIntShaderData[specificAttrIdx];
                                             for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
                                             {
                                                 attrHandle.set(primOffset + iPoly, attrValue);
@@ -809,8 +764,7 @@ namespace glm
                                         GA_RWHandleF attrHandle(attr);
                                         if (attrHandle.isValid())
                                         {
-                                            size_t attrValueIdx = globalToFloatShaderAttrIdx[iShAttr];
-                                            float attrValue = floatAttrValues[attrValueIdx];
+                                            float attrValue = entityFloatShaderData[specificAttrIdx];
                                             for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
                                             {
                                                 attrHandle.set(primOffset + iPoly, attrValue);
@@ -824,8 +778,7 @@ namespace glm
                                         GA_RWHandleS attrHandle(attr);
                                         if (attrHandle.isValid())
                                         {
-                                            size_t attrValueIdx = globalToStringShaderAttrIdx[iShAttr];
-                                            const glm::GlmString& attrValue = stringAttrValues[attrValueIdx];
+                                            const glm::GlmString& attrValue = entityStringShaderData[specificAttrIdx];
                                             for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
                                             {
                                                 attrHandle.set(primOffset + iPoly, attrValue.c_str());
@@ -839,8 +792,7 @@ namespace glm
                                         GA_RWHandleV3 attrHandle(attr);
                                         if (attrHandle.isValid())
                                         {
-                                            size_t attrValueIdx = globalToVectorShaderAttrIdx[iShAttr];
-                                            const glm::Vector3& attrValue = vectorAttrValues[attrValueIdx];
+                                            const glm::Vector3& attrValue = entityVectorShaderData[specificAttrIdx];
                                             for (GA_Size iPoly = 0; iPoly < actualPolyCount; ++iPoly)
                                             {
                                                 attrHandle.set(
@@ -1238,7 +1190,7 @@ namespace glm
         if (counter.mustCountUnshared())
         {
             size_t mem = getMemoryUsage(inclusive);
-            //UT_MEMORY_DEBUG_LOG("GU_PackedSphere", int64(mem));
+            // UT_MEMORY_DEBUG_LOG("GU_PackedSphere", int64(mem));
             counter.countUnshared(mem);
         }
     }
