@@ -1161,7 +1161,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             packedEntity->_isNew = entityIsNew;
             packedEntity->_inputData._frameDatas[0] = frameData;
             packedEntity->_inputData._frames[0] = (double)currentFrame;
-            packedEntity->_inputData._shaderData = &shaderDataContainer->data[iEntity];
+            packedEntity->_inputData._shaderDataContainer = shaderDataContainer;
             if (entityIsNew)
             {
                 //packedEntity->_inputData._dirMapRules // left empty for now
