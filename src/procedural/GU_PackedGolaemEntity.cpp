@@ -78,11 +78,7 @@ namespace glm
     //-----------------------------------------------------------------------------
     UT_StringHolder sanitizeName(const UT_StringHolder& name)
     {
-#if HDK_API_VERSION < 18000000
-        return UT_VarEncode::encode(name);
-#else
         return UT_VarEncode::encodeVar(name);
-#endif
     }
 
     //-----------------------------------------------------------------------------
@@ -99,14 +95,12 @@ namespace glm
             return new GU_PackedGolaemEntity();
         }
 
-#if HDK_API_VERSION >= 18000000
         const UT_IntrusivePtr<GU_PackedImpl>& defaultImpl() const override
         {
             return _defaultImpl;
         }
 
         UT_IntrusivePtr<GU_PackedImpl> _defaultImpl = new GU_PackedGolaemEntity();
-#endif
     };
 
     static GU_PackedGolaemFactory* theGolaemFactory = NULL;
