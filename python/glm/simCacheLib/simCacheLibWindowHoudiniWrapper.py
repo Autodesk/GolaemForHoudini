@@ -60,6 +60,6 @@ class SimCacheLibWindowHoudiniWrapper(windowHoudiniWrapper.WindowHoudiniWrapper)
     # Return true if a button is available is this interface
     #------------------------------------------------------------------
     def isButtonAvailable(self, buttonName):
-        if buttonName == "Import from selected / scene Simulation Cache Proxy" or buttonName == "Update Thumbnail from Viewport":
+        if buttonName == "Import from selected / scene Simulation Cache Proxy" or buttonName == "Update Thumbnail from Viewport" or buttonName == "Import Simulation Cache in Scene as Multiple Proxies":
             return False
         return True
