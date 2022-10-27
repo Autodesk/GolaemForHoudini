@@ -150,11 +150,8 @@ namespace glm
         const GT_GEOPrimitive* geoPrim = static_cast<const GT_GEOPrimitive*>(primh.get());
         const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(geoPrim->getPrimitive(0));
 
-#if HDK_API_VERSION >= 18050000
         const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
-#else
-        const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
-#endif
+
         assignEntity(packedEntity);
 
         if (_packedEntity->_inputData._entityId == -1)

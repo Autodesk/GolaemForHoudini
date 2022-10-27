@@ -61,11 +61,9 @@ namespace glm
         if (prim != NULL && prim->getTypeId() == GU_PackedGolaemEntity::getTypeId())
         {
 			const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(prim);
-#if HDK_API_VERSION >= 18050000        
+
             const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
-#else
-			const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
-#endif
+
             if (packedEntity->_inputData._entityId != -1)
             {
                 if (packedEntity->_viewportGeo.get() == NULL)

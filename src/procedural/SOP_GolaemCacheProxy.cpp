@@ -1097,20 +1097,12 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             if (prim != NULL && prim->getTypeId() == glm::GU_PackedGolaemEntity::getTypeId())
             {
                 GU_PrimPacked* packedPrim = static_cast<GU_PrimPacked*>(prim);
-#if HDK_API_VERSION < 18000000
-                packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->implementation());
-#else
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
-#endif
             }
             else
             {
                 GU_PrimPacked* packedPrim = GU_PrimPacked::build(*gdp, glm::GU_PackedGolaemEntity::getTypeId());
-#if HDK_API_VERSION < 18000000
-                packedEntity = static_cast<glm ::GU_PackedGolaemEntity*>(packedPrim->implementation());
-#else
                 packedEntity = static_cast<glm::GU_PackedGolaemEntity*>(packedPrim->hardenImplementation());
-#endif
                 prim = packedPrim;
             }
             bool entityIsNew = packedEntity->_inputData._entityId == -1;
@@ -1125,7 +1117,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 continue;
             }
 
-            bool excludedEntity = frameData->_entityEnabled[iEntity] != 1;
+            int32_t indexInFrameData = simuData->_indexInFrameData[iEntity];
+            GLM_DEBUG_ASSERT(indexInFrameData >= 0);
+            bool excludedEntity = frameData->_entityEnabled[indexInFrameData] != 1;
             if (!excludedEntity)
             {
                 excludedEntity = iEntity >= maxEntities;
@@ -1169,6 +1163,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 packedEntity->_character = character;
                 packedEntity->_inputData._geometryTag = geoTag;
                 packedEntity->_inputData._simuData = simuData;
+                packedEntity->_inputData._indexInFrameData = indexInFrameData;
 
                 packedEntity->_inputData._characterIdx = characterIdx;
                 packedEntity->_inputData._character = character;
