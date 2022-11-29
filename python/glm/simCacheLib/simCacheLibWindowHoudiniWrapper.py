@@ -42,12 +42,19 @@ class SimCacheLibWindowHoudiniWrapper(windowHoudiniWrapper.WindowHoudiniWrapper)
             cacheProxy = geoNode.createNode("golaemCacheProxy")
             if cacheProxy:
                 # update cache proxy parameters
-                cacheProxy.parm("glmCacheLibFile").set(lib.libFile)
                 item = lib.getLibItemAt(itemIdx)
                 if item.isInitialized():
-                    cacheProxy.parm("glmCacheLibItem").set(item.itemName)
-                # force reevaluating cache params
-                cacheProxy.parm("glmForceCacheLibEval").set(1)
+                    cacheProxy.parm("glmCrowdFieldNames").set(";".join(item.crowdFields))
+                    cacheProxy.parm("glmCacheName").set(item.cacheName)
+                    cacheProxy.parm("glmCacheDir").set(item.cacheDir)
+                    cacheProxy.parm("glmCharacterFiles").set(item.characterFiles)
+                    cacheProxy.parm("glmSourceTerrain").set(item.sourceTerrain)
+                    cacheProxy.parm("glmDestTerrain").set(item.destTerrain)
+                    cacheProxy.parm("glmEnableLayout").set(item.enableLayout)
+                    layoutFilePaths = item.layoutFile.split(";")
+                    cacheProxy.parm("glmLayoutFiles").set(len(layoutFilePaths))
+                    for layoutFileIndex in range(0, len(layoutFilePaths)):
+                        cacheProxy.parm("glmLayoutFile" + str(layoutFileIndex + 1)).set(layoutFilePaths[layoutFileIndex])
         return cacheProxy
 
     #------------------------------------------------------------------
@@ -60,6 +67,6 @@ class SimCacheLibWindowHoudiniWrapper(windowHoudiniWrapper.WindowHoudiniWrapper)
     # Return true if a button is available is this interface
     #------------------------------------------------------------------
     def isButtonAvailable(self, buttonName):
-        if buttonName == "Import from selected / scene Simulation Cache Proxy" or buttonName == "Update Thumbnail from Viewport" or buttonName == "Import as Simulation in Scene":
+        if buttonName == "Import from selected / scene Simulation Cache Proxy" or buttonName == "Update Thumbnail from Viewport" or buttonName == "Import Simulation Cache in Scene as Multiple Proxies" or buttonName == "Import as Simulation in Scene":
             return False
         return True
