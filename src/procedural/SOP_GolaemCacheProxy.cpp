@@ -928,9 +928,9 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 continue;
             }
 
-            int32_t indexInFrameData = simuData->_indexInFrameData[iEntity];
-            GLM_DEBUG_ASSERT(indexInFrameData >= 0);
-            bool excludedEntity = frameData->_entityEnabled[indexInFrameData] != 1;
+            int32_t entityToBakeIndex = simuData->_entityToBakeIndex[iEntity];
+            GLM_DEBUG_ASSERT(entityToBakeIndex >= 0);
+            bool excludedEntity = frameData->_entityEnabled[entityToBakeIndex] != 1;
             if (!excludedEntity)
             {
                 excludedEntity = iEntity >= maxEntities;
@@ -974,7 +974,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 packedEntity->_character = character;
                 packedEntity->_inputData._geometryTag = geoTag;
                 packedEntity->_inputData._simuData = simuData;
-                packedEntity->_inputData._indexInFrameData = indexInFrameData;
+                packedEntity->_inputData._entityToBakeIndex = entityToBakeIndex;
 
                 packedEntity->_inputData._characterIdx = characterIdx;
                 packedEntity->_inputData._character = character;
