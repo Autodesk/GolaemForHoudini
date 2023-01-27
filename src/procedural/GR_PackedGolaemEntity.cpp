@@ -513,6 +513,9 @@ namespace glm
                 //    }
                 //}
 
+                _packedEntity->_inputData._fbxStorage = &getFbxStorage();
+                _packedEntity->_inputData._fbxBaker = &getFbxBaker();
+
                 geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_packedEntity->_inputData, &outputData);
                 if (geoStatus == glm::crowdio::GIO_SUCCESS)
                 {

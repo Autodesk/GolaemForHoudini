@@ -22,6 +22,11 @@ HDK_INCLUDES_END
 
 namespace glm
 {
+    namespace crowdio
+    {
+        class CrowdFBXStorage;
+        class CrowdFBXBaker;
+    }
     struct ShaderAssetDataContainer;
 
     struct GolaemDisplayMode
@@ -50,7 +55,7 @@ namespace glm
     public:
         glm::Vector3 _rootPos;
         glm::Vector3 _halfExtents;
-        glm::crowdio::InputEntityGeoData _inputData; // for geometry generation
+        mutable glm::crowdio::InputEntityGeoData _inputData; // for geometry generation
         const glm::GolaemCharacter* _character;
         glm::PODArray<size_t>* _sortedBonesInverse;
         glm::PODArray<int>* _shadingGroupToSurfaceShader;
@@ -114,4 +119,10 @@ namespace glm
 
         void updateFrom(GU_PrimPacked* prim, const UT_Options& options);
     };
+
+    //-----------------------------------------------------------------------------
+    glm::crowdio::CrowdFBXStorage& getFbxStorage();
+
+    //-----------------------------------------------------------------------------
+    glm::crowdio::CrowdFBXBaker& getFbxBaker();
 } // namespace glm

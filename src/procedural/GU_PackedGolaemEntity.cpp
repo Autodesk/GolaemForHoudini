@@ -124,8 +124,6 @@ namespace glm
 
         _inputData._frameDatas.resize(1, NULL);
         _inputData._frames.resize(1);
-        _inputData._fbxStorage = &getFbxStorage();
-        _inputData._fbxBaker = &getFbxBaker();
     }
 
     //-----------------------------------------------------------------------------
@@ -424,6 +422,9 @@ namespace glm
                     const glm::Array<glm::GlmString>& entityStringShaderData = shaderDataContainer->stringData[_inputData._entityIndex];
 
                     const PODArray<size_t>& globalToSpecificShaderAttrIdx = shaderDataContainer->globalToSpecificShaderAttrIdxPerChar[_inputData._characterIdx];
+
+                    _inputData._fbxStorage = &getFbxStorage();
+                    _inputData._fbxBaker = &getFbxBaker();
 
                     geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
                     if (geoStatus == glm::crowdio::GIO_SUCCESS)
