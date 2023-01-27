@@ -29,6 +29,7 @@ HDK_INCLUDES_START
 #include <HOM/HOM_shelves.h>
 #include <GU/GU_PackedFactory.h>
 #include <GU/GU_PrimPacked.h>
+#include <FBX/FBX_AllocWrapper.h>
 
 HDK_INCLUDES_END
 
@@ -784,6 +785,8 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     op->getDefinitionSource(defSource);
     glm::FileName pluginPath(defSource.c_str());
     glm::GlmString pluginDir = pluginPath.pathname();
+
+    FBXwrapAllocators(); // use Houdini's FBX allocators (otherwise Houdini crashes when importing a FBX and Golaem is loaded)
 
     bool allowCreatePLE = true;
     bool deferLicenseCheck = false; // check for licenses at crowdio::init
