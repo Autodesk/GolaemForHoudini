@@ -27,6 +27,11 @@ set_target_prefix( ${PROJECT_NAME} PLUGIN )
 set_target_postfix( ${PROJECT_NAME} PLUGIN )
 
 if( MSVC)
+    if(DEFINED GLM_EXCLUDE_INVALID_DEBUG_BUILDS) # used by build servers
+        set_target_properties( ${PROJECT_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE )
+        set( GLM_EXCLUDED_TARGETS_FILE_PATH "${CMAKE_BINARY_DIR}/glmExcludedDebugTargets.txt" )
+        file(APPEND "${GLM_EXCLUDED_TARGETS_FILE_PATH}" "${PROJECT_NAME}\n")
+    endif()
 	set_target_properties( ${PROJECT_NAME} PROPERTIES EXCLUDE_FROM_DEFAULT_BUILD_DEBUG ON )
 endif()
 
