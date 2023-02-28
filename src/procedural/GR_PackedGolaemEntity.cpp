@@ -6,6 +6,7 @@
 
 #include "GR_PackedGolaemEntity.h"
 #include "GU_PackedGolaemEntity.h"
+#include "glmHoudiniUtils.h"
 
 HDK_INCLUDES_START
 
@@ -513,8 +514,8 @@ namespace glm
                 //    }
                 //}
 
-                _packedEntity->_inputData._fbxStorage = &getFbxStorage();
-                _packedEntity->_inputData._fbxBaker = &getFbxBaker();
+                _packedEntity->_inputData._fbxStorage = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxStorage();
+                _packedEntity->_inputData._fbxBaker = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxBaker();
 
                 geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_packedEntity->_inputData, &outputData);
                 if (geoStatus == glm::crowdio::GIO_SUCCESS)

@@ -7,6 +7,7 @@
 #include "GU_PackedGolaemEntity.h"
 //#include "GT_PackedGolaemEntity.h"
 #include "GR_PackedGolaemEntity.h"
+#include "glmHoudiniUtils.h"
 
 HDK_INCLUDES_START
 
@@ -30,18 +31,14 @@ HDK_INCLUDES_END
 #include <glmAssetManagementUtils.h>
 
 #include <glmCrowdFBXCharacter.h>
-#include <glmCrowdGcgStorage.h>
 #include <glmCrowdGcgCharacter.h>
 #include <glmCrowdGcgBaker.h>
-#include <glmCrowdFBXStorage.h>
 #include <glmCrowdFBXBaker.h>
 #include <glmRenderGeometry.h>
 #include <glmSimulationCacheFactorySimulation.h>
 
 namespace glm
 {
-    static glm::Mutex _fbxMutex;
-
     GA_PrimitiveTypeId GU_PackedGolaemEntity::_typeId(-1);
 
     //-----------------------------------------------------------------------------
@@ -56,23 +53,6 @@ namespace glm
     {
         static glm::GlmString meshAttrName = "glmMeshName";
         return meshAttrName;
-    }
-
-    //-----------------------------------------------------------------------------
-    glm::crowdio::CrowdFBXStorage& getFbxStorage()
-    {
-        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
-        static glm::crowdio::CrowdFBXStorage fbxStorage;
-        return fbxStorage;
-    }
-
-    //-----------------------------------------------------------------------------
-    glm::crowdio::CrowdFBXBaker& getFbxBaker()
-    {
-        glm::crowdio::CrowdFBXStorage& fbxStorage = getFbxStorage();
-        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
-        static glm::crowdio::CrowdFBXBaker fbxBaker(fbxStorage.touchFbxSdkManager());
-        return fbxBaker;
     }
 
     //-----------------------------------------------------------------------------
@@ -423,8 +403,8 @@ namespace glm
 
                     const PODArray<size_t>& globalToSpecificShaderAttrIdx = shaderDataContainer->globalToSpecificShaderAttrIdxPerChar[_inputData._characterIdx];
 
-                    _inputData._fbxStorage = &getFbxStorage();
-                    _inputData._fbxBaker = &getFbxBaker();
+                    _inputData._fbxStorage = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxStorage();
+                    _inputData._fbxBaker = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxBaker();
 
                     geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
                     if (geoStatus == glm::crowdio::GIO_SUCCESS)
