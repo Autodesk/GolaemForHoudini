@@ -7,7 +7,7 @@
 #include "GU_PackedGolaemEntity.h"
 
 #include "glmHoudini.h"
-#include "glmHoudiniLogger.h"
+#include "glmHoudiniUtils.h"
 
 HDK_INCLUDES_START
 
@@ -738,6 +738,8 @@ static void glmDsoExit(void* data)
 {
     GLM_UNREFERENCED(data);
 
+    glm::Singleton<glm::HoudiniFbxData>::destroy();
+
     glm::crowdio::finish();
     glm::theGolaemLogger::destroy();
     glm::finishCore();
@@ -792,6 +794,8 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     bool deferLicenseCheck = false; // check for licenses at crowdio::init
     glm::crowdio::setupGolaemProduct("GolaemForHoudini", pluginDir, productDetails, deferLicenseCheck, allowCreatePLE);
     glm::crowdio::init();
+
+    glm::Singleton<glm::HoudiniFbxData>::create();
 
     UT_Exit::addExitCallback(glmDsoExit);
 
