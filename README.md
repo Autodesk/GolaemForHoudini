@@ -21,4 +21,4 @@ Official documentation for the plugin can be found here: [http://houdini.golaem.
 
 ###
 ## Changelog
-Changelog for the plugin can be found here: [ChangeLog](CHANGELOG)
+Changelog for the plugin can be found in the Golaem For Maya Changelog
