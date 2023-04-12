@@ -7,6 +7,7 @@
 #include "GU_PackedGolaemEntity.h"
 //#include "GT_PackedGolaemEntity.h"
 #include "GR_PackedGolaemEntity.h"
+#include "glmHoudiniUtils.h"
 
 HDK_INCLUDES_START
 
@@ -30,18 +31,14 @@ HDK_INCLUDES_END
 #include <glmAssetManagementUtils.h>
 
 #include <glmCrowdFBXCharacter.h>
-#include <glmCrowdGcgStorage.h>
 #include <glmCrowdGcgCharacter.h>
 #include <glmCrowdGcgBaker.h>
-#include <glmCrowdFBXStorage.h>
 #include <glmCrowdFBXBaker.h>
 #include <glmRenderGeometry.h>
 #include <glmSimulationCacheFactorySimulation.h>
 
 namespace glm
 {
-    static glm::Mutex _fbxMutex;
-
     GA_PrimitiveTypeId GU_PackedGolaemEntity::_typeId(-1);
 
     //-----------------------------------------------------------------------------
@@ -56,23 +53,6 @@ namespace glm
     {
         static glm::GlmString meshAttrName = "glmMeshName";
         return meshAttrName;
-    }
-
-    //-----------------------------------------------------------------------------
-    glm::crowdio::CrowdFBXStorage& getFbxStorage()
-    {
-        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
-        static glm::crowdio::CrowdFBXStorage fbxStorage;
-        return fbxStorage;
-    }
-
-    //-----------------------------------------------------------------------------
-    glm::crowdio::CrowdFBXBaker& getFbxBaker()
-    {
-        glm::crowdio::CrowdFBXStorage& fbxStorage = getFbxStorage();
-        glm::ScopedLock<glm::Mutex> lock(_fbxMutex);
-        static glm::crowdio::CrowdFBXBaker fbxBaker(fbxStorage.touchFbxSdkManager());
-        return fbxBaker;
     }
 
     //-----------------------------------------------------------------------------
@@ -423,8 +403,8 @@ namespace glm
 
                     const PODArray<size_t>& globalToSpecificShaderAttrIdx = shaderDataContainer->globalToSpecificShaderAttrIdxPerChar[_inputData._characterIdx];
 
-                    _inputData._fbxStorage = &getFbxStorage();
-                    _inputData._fbxBaker = &getFbxBaker();
+                    _inputData._fbxStorage = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxStorage();
+                    _inputData._fbxBaker = glm::Singleton<glm::HoudiniFbxData>::getInstance().getFbxBaker();
 
                     geoStatus = glm::crowdio::glmPrepareEntityGeometry(&_inputData, &outputData);
                     if (geoStatus == glm::crowdio::GIO_SUCCESS)
@@ -461,8 +441,9 @@ namespace glm
 
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
+                                crowdio::CrowdFBXCharacter* fbxCharacter = outputData._fbxCharacters[0];
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
-                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
+                                FbxMesh* fbxMesh = fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
 
                                 FbxLayer* fbxLayer0 = fbxMesh->GetLayer(0);
                                 bool hasMaterials = false;
@@ -611,8 +592,9 @@ namespace glm
                             }
                             else if (outputData._geoType == glm::crowdio::GeometryType::GCG)
                             {
-                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
-                                glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
+                                crowdio::CrowdGcgCharacter* gcgCharacter = outputData._gcgCharacters[0];
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
+                                glm::crowdio::GlmFileMesh& assetFileMesh = gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                                 for (uint32_t iPoly = 0, iVertex = 0; iPoly < assetFileMesh._polygonCount; ++iPoly)
                                 {
@@ -923,9 +905,10 @@ namespace glm
                             // Extract frame
                             if (outputData._geoBeInfo._idGeometryFileIdx != -1)
                             {
+                                crowdio::CrowdFBXCharacter* fbxCharacter = outputData._fbxCharacters[0];
                                 const glm::crowdio::GlmFrameData* frameData = _inputData._frameDatas[0];
                                 float(&geometryFrameCacheData)[3] = frameData->_geoBehaviorAnimFrameInfo[outputData._geoBeInfo._geoDataIndex];
-                                double frameRate(FbxTime::GetFrameRate(outputData._fbxCharacter->touchFBXScene()->GetGlobalSettings().GetTimeMode()));
+                                double frameRate(FbxTime::GetFrameRate(fbxCharacter->touchFBXScene()->GetGlobalSettings().GetTimeMode()));
                                 fbxTime.SetGlobalTimeMode(FbxTime::eCustom, frameRate);
                                 fbxTime.SetMilliSeconds(long((double)geometryFrameCacheData[0] / frameRate * 1000.0));
                             }
@@ -954,12 +937,13 @@ namespace glm
                             const GA_Offset& vertexOffset = _vertexOffsets[iRenderMesh];
                             if (outputData._geoType == glm::crowdio::GeometryType::FBX)
                             {
+                                crowdio::CrowdFBXCharacter* fbxCharacter = outputData._fbxCharacters[0];
                                 // when fbxMesh == NULL, vertexCount == 0, so no need to check fbxMesh != NULL
-                                FbxNode* fbxNode = outputData._fbxCharacter->getCharacterFBXMeshes()[iGeoFileMesh];
-                                FbxMesh* fbxMesh = outputData._fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
+                                FbxNode* fbxNode = fbxCharacter->getCharacterFBXMeshes()[iGeoFileMesh];
+                                FbxMesh* fbxMesh = fbxCharacter->getCharacterFBXMesh(iGeoFileMesh);
 
                                 // for each mesh, get the transform in case of its position in not relative to the center of the world
-                                outputData._fbxCharacter->getMeshGlobalTransform(nodeTransform, fbxNode, fbxTime);
+                                fbxCharacter->getMeshGlobalTransform(nodeTransform, fbxNode, fbxTime);
                                 glm::crowdio::CrowdFBXBaker::getGeomTransform(geomTransform, fbxNode);
                                 nodeTransform *= geomTransform;
 
@@ -1106,9 +1090,9 @@ namespace glm
                                                            meshVertex[1],
                                                            meshVertex[2]));
                                 }
-
-                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = outputData._gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
-                                glm::crowdio::GlmFileMesh& assetFileMesh = outputData._gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
+                                crowdio::CrowdGcgCharacter* gcgCharacter = outputData._gcgCharacters[0];
+                                glm::crowdio::GlmFileMeshTransform& assetFileMeshTransform = gcgCharacter->getGeometry()._transforms[outputData._transformIndicesInGcgFile[iRenderMesh]];
+                                glm::crowdio::GlmFileMesh& assetFileMesh = gcgCharacter->getGeometry()._meshes[assetFileMeshTransform._meshIndex];
 
                                 // add normals
                                 GA_Attribute* normalAttr = detailPtr->addNormalAttribute(GA_ATTRIB_VERTEX, GA_STORE_REAL32);
