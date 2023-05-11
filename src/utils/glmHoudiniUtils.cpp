@@ -1,10 +1,10 @@
 /***************************************************************************
-*                                                                          *
-*  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
-*                                                                          *
-***************************************************************************/
+ *                                                                          *
+ *  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
+ *                                                                          *
+ ***************************************************************************/
 
-#include "glmHoudiniLogger.h"
+#include "glmHoudiniUtils.h"
 #include "glmHoudini.h"
 
 HDK_INCLUDES_START
@@ -12,6 +12,10 @@ HDK_INCLUDES_START
 #include <SOP/SOP_Node.h>
 
 HDK_INCLUDES_END
+
+#include <glmCrowdFBXStorage.h>
+#include <glmCrowdFBXBaker.h>
+
 namespace glm
 {
     //-----------------------------------------------------------------------------
@@ -64,5 +68,31 @@ namespace glm
         default:
             break;
         }
+    }
+
+    //-----------------------------------------------------------------------------
+    HoudiniFbxData::HoudiniFbxData()
+    {
+        _fbxStorage = new glm::crowdio::CrowdFBXStorage();
+        _fbxBaker = new glm::crowdio::CrowdFBXBaker(_fbxStorage->touchFbxSdkManager());
+    }
+
+    //-----------------------------------------------------------------------------
+    HoudiniFbxData::~HoudiniFbxData()
+    {
+        delete _fbxBaker;
+        delete _fbxStorage;
+    }
+
+    //-----------------------------------------------------------------------------
+    glm::crowdio::CrowdFBXStorage* HoudiniFbxData::getFbxStorage()
+    {
+        return _fbxStorage;
+    }
+
+    //-----------------------------------------------------------------------------
+    glm::crowdio::CrowdFBXBaker* HoudiniFbxData::getFbxBaker()
+    {
+        return _fbxBaker;
     }
 } // namespace glm
