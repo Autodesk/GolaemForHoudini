@@ -15,10 +15,12 @@ HDK_INCLUDES_START
 #include <RE/RE_VertexArray.h>
 #include <RE/RE_ShaderHandle.h>
 #include <RE/RE_Render.h>
-#include <UT/UT_HDKVersion.h>
 #include <RE/RE_LightList.h>
 #include <GR/GR_Utils.h>
 #include <RE/RE_ElementArray.h>
+#if HDK_API_VERSION >= 20000000
+#include <GR/GR_Light.h>
+#endif
 
 HDK_INCLUDES_END
 
@@ -144,10 +146,14 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::update(
+#if HDK_API_VERSION >= 20000000
+        RE_RenderContext rend,
+#else
         RE_Render* rend,
+#endif
         const GT_PrimitiveHandle& primh,
         const GR_UpdateParms& params)
-    {
+    {   
         const GT_GEOPrimitive* geoPrim = static_cast<const GT_GEOPrimitive*>(primh.get());
         const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(geoPrim->getPrimitive(0));
 
@@ -1608,7 +1614,11 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::render(
+#if HDK_API_VERSION >= 20000000
+        RE_RenderContext rend,
+#else
         RE_Render* rend,
+#endif
         GR_RenderMode render_mode,
         GR_RenderFlags flags,
         GR_DrawParms drawparams)
@@ -1708,7 +1718,11 @@ namespace glm
                 // Set up lighting for any GL3 lighting blocks
                 if (shader && drawparams.opts->getLightList())
                 {
-                    drawparams.opts->getLightList()->bindForShader(rend, shader);
+#if HDK_API_VERSION >= 20000000
+                    drawparams.opts->getLightList()->glLights()->bindForShader(rend, shader);
+#else
+                    drawparams.opts->getLightList()-->bindForShader(rend, shader);
+#endif
                 }
 
 #if HDK_API_VERSION >= 19000000
@@ -1767,7 +1781,11 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::renderDecoration(
+#if HDK_API_VERSION >= 20000000
+        RE_RenderContext rend,
+#else
         RE_Render* rend,
+#endif 
         GR_Decoration decor,
         const GR_DecorationParms& parms)
     {
@@ -1783,7 +1801,11 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     int GR_PackedGolaemEntity::renderPick(
+#if HDK_API_VERSION >= 20000000
+        RE_RenderContext rend,
+#else
         RE_Render* rend,
+#endif 
         const GR_DisplayOption* opt,
         unsigned int pick_type,
         GR_PickStyle pick_style,

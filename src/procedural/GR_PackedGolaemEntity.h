@@ -9,7 +9,7 @@
 #include "GU_PackedGolaemEntity.h"
 
 HDK_INCLUDES_START
-
+#include <UT/UT_HDKVersion.h>
 #include <GUI/GUI_PrimitiveHook.h>
 #include <GR/GR_Primitive.h>
 
@@ -65,8 +65,31 @@ namespace glm
     protected:
         void assignEntity(const GU_PackedGolaemEntity* packedEntity);
 
+#if HDK_API_VERSION >= 20000000
         void update(
-            RE_Render* rend,
+            RE_RenderContext rend,
+            const GT_PrimitiveHandle& primh,
+            const GR_UpdateParms& p) override;
+
+        void render(
+            RE_RenderContext rend,
+            GR_RenderMode render_mode,
+            GR_RenderFlags flags,
+            GR_DrawParms drawparams) override;
+
+        void renderDecoration(
+            RE_RenderContext rend,
+            GR_Decoration decor,
+            const GR_DecorationParms& parms) override;
+
+        int renderPick(
+            RE_RenderContext rend,
+            const GR_DisplayOption* opt,
+            unsigned int pick_type,
+            GR_PickStyle pick_style,
+            bool has_pick_map) override;
+#else
+        void update(RE_Render* rend,
             const GT_PrimitiveHandle& primh,
             const GR_UpdateParms& params) override;
 
@@ -87,6 +110,7 @@ namespace glm
             unsigned int pick_type,
             GR_PickStyle pick_style,
             bool has_pick_map) override;
+#endif
 
         void clearGeo();
     };
