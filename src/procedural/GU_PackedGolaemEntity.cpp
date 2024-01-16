@@ -5,7 +5,7 @@
  ***************************************************************************/
 
 #include "GU_PackedGolaemEntity.h"
-//#include "GT_PackedGolaemEntity.h"
+#include "GT_PackedGolaemEntity.h"
 #include "GR_PackedGolaemEntity.h"
 #include "glmHoudiniUtils.h"
 
@@ -165,13 +165,14 @@ namespace glm
             // GT_PackedGolaemEntity::registerPrimitive(_typeId);
 
             // Since we're only registering one hook, the priority does not matter.
-            int hookPriority = 0;
+            /*int hookPriority = 0;
 
             DM_RenderTable::getTable()->registerGEOHook(
                 new GR_PackedGolaemEntityHook(),
                 _typeId,
                 hookPriority,
-                GUI_HOOK_FLAG_NONE);
+                GUI_HOOK_FLAG_NONE);*/
+            GT_PackedGolaemEntity::registerPrimitive(_typeId);
         }
         else
         {
