@@ -154,8 +154,14 @@ namespace glm
         const GT_PrimitiveHandle& primh,
         const GR_UpdateParms& params)
     {   
-        const GT_GEOPrimitive* geoPrim = static_cast<const GT_GEOPrimitive*>(primh.get());
-        const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(geoPrim->getPrimitive(0));
+        //const GT_GEOPrimitive* geoPrim = static_cast<const GT_GEOPrimitive*>(primh.get());
+        //const GU_PrimPacked* packedPrim = static_cast<const GU_PrimPacked*>(geoPrim->getPrimitive(0));
+
+        const GU_PrimPacked* packedPrim = NULL;
+        getGEOPrimFromGT<GU_PrimPacked>(primh, packedPrim);
+        const int num_tets = packedPrim ? 1 : 0;
+        if (num_tets == 0)
+            return;
 
         const GU_PackedGolaemEntity* packedEntity = static_cast<const glm::GU_PackedGolaemEntity*>(packedPrim->sharedImplementation());
 
@@ -1721,7 +1727,7 @@ namespace glm
 #if HDK_API_VERSION >= 20000000
                     drawparams.opts->getLightList()->glLights()->bindForShader(rend, shader);
 #else
-                    drawparams.opts->getLightList()-->bindForShader(rend, shader);
+                    drawparams.opts->getLightList()->bindForShader(rend, shader);
 #endif
                 }
 
