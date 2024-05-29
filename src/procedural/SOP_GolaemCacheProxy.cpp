@@ -764,7 +764,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
             << " This version of Houdini is not supported. Unexpected errors or crashes might occur.");
     }
 
-    glm::crowdio::ProductDetails productDetails;
+    glm::crowdio::ProductDetails productDetails = GLM_SETUP_PRODUCT_DETAILS;
     productDetails._fullVersion = glm::crowdio::getGolaemVersion();
     productDetails._containerApplicationName = "Houdini";
     productDetails._containerApplicationVersion = SYS_Version::release();
@@ -792,7 +792,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 
     bool allowCreatePLE = true;
     bool deferLicenseCheck = false; // check for licenses at crowdio::init
-    glm::crowdio::setupGolaemProduct("GolaemForHoudini", pluginDir, productDetails, deferLicenseCheck, allowCreatePLE);
+    glm::crowdio::setupGolaemProduct(pluginDir, productDetails, deferLicenseCheck, allowCreatePLE);
     glm::crowdio::init();
 
     glm::Singleton<glm::HoudiniFbxData>::create();
