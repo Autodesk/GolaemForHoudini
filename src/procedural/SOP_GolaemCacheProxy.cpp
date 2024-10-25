@@ -764,12 +764,6 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
             << " This version of Houdini is not supported. Unexpected errors or crashes might occur.");
     }
 
-    glm::crowdio::ProductDetails productDetails = GLM_SETUP_PRODUCT_DETAILS;
-    productDetails._fullVersion = glm::crowdio::getGolaemVersion();
-    productDetails._containerApplicationName = "Houdini";
-    productDetails._containerApplicationVersion = SYS_Version::release();
-    productDetails._notificationHandler = NULL; // todo: install viewport notification
-
     OP_Operator* op = new OP_Operator(
         "golaemCacheProxy",
         "Golaem Cache Proxy",
@@ -786,13 +780,9 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
     UT_String defSource;
     op->getDefinitionSource(defSource);
     glm::FileName pluginPath(defSource.c_str());
-    glm::GlmString pluginDir = pluginPath.pathname();
 
     FBXwrapAllocators(); // use Houdini's FBX allocators (otherwise Houdini crashes when importing a FBX and Golaem is loaded)
 
-    bool allowCreatePLE = true;
-    bool deferLicenseCheck = false; // check for licenses at crowdio::init
-    glm::crowdio::setupGolaemProduct(pluginDir, productDetails, deferLicenseCheck, allowCreatePLE);
     glm::crowdio::init();
 
     glm::Singleton<glm::HoudiniFbxData>::create();
