@@ -41,6 +41,7 @@ HDK_INCLUDES_END
 #include <glmFileDir.h>
 #include <glmFileName.h>
 #include <glmGolaemCharacter.h>
+#include "glmADP.h"
 
 #include "glmCrowdHoudiniPluginAPI.h"
 
@@ -783,6 +784,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 
     FBXwrapAllocators(); // use Houdini's FBX allocators (otherwise Houdini crashes when importing a FBX and Golaem is loaded)
 
+    glm::crowdio::setupGolaemProduct("GolaemForHoudini", HDK_API_VERSION);
     glm::crowdio::init();
 
     glm::Singleton<glm::HoudiniFbxData>::create();
