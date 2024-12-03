@@ -875,6 +875,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     GA_Size primitiveIndex = 0;
     GA_Size primCount = gdp->getNumPrimitives();
 
+    size_t totalEntityTypesCount(0);
     glm::Array<glm::GlmString> crowdFieldNames = glm::stringToStringArray(cfNames.c_str(), ";");
     for (size_t iCf = 0, cfCount = crowdFieldNames.size(); iCf < cfCount; ++iCf)
     {
@@ -891,6 +892,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         {
             continue;
         }
+        totalEntityTypesCount += simuData->_entityTypeCount;
         const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getFinalEntityAssets(currentFrame);
         const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
 
@@ -1014,6 +1016,46 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
     _noUpdateLoop = true;
     setInt(getParamName(GolaemParams::ENTITY_COUNT), 0, time, entityCount);
     _noUpdateLoop = false;
+
+    glm::Array<glm::GlmString> ADPattributeNames;
+    glm::Array<glm::GlmString> ADPattributeValues;
+
+    std::stringstream toChar;
+    toChar << entityCount;
+    ADPattributeNames.push_back("entityCount");
+    ADPattributeValues.push_back(toChar.str().c_str());
+
+    toChar.str("");
+    toChar.clear();
+    toChar << totalEntityTypesCount;
+    ADPattributeNames.push_back("entityTypeCount");
+    ADPattributeValues.push_back(toChar.str().c_str());
+
+    toChar.str("");
+    toChar.clear();
+    toChar << _factory.getGolaemCharacters().size();
+    ADPattributeNames.push_back("characterFilesCount");
+    ADPattributeValues.push_back(toChar.str().c_str());
+
+    size_t totalLayoutNodesCount(0);
+    for (size_t iLayout = 0; iLayout < _factory.getLayoutHistoryCount(); iLayout++)
+    {
+        if (_factory.getLayoutHistory(iLayout))
+            totalLayoutNodesCount+=_factory.getLayoutHistory(iLayout)->_layoutNodesCount;
+    }
+    toChar.str("");
+    toChar.clear();
+    toChar << totalLayoutNodesCount;
+    ADPattributeNames.push_back("layoutNodesCount");
+    ADPattributeValues.push_back(toChar.str().c_str());
+
+    toChar.str("");
+    toChar.clear();
+    toChar << crowdFieldNames.size();
+    ADPattributeNames.push_back("crowdFieldCount");
+    ADPattributeValues.push_back(toChar.str().c_str());
+
+    glm::crowdio::ADPTrackEvent("COOK", ADPattributeNames, ADPattributeValues);
 
     return error();
 }
