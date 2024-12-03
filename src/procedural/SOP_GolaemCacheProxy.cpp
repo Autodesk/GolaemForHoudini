@@ -27,6 +27,7 @@ HDK_INCLUDES_START
 #include <PY/PY_Python.h>
 #include <HOM/HOM_Module.h>
 #include <HOM/HOM_shelves.h>
+#include <HOM/HOM_qt.h>
 #include <GU/GU_PackedFactory.h>
 #include <GU/GU_PrimPacked.h>
 #include <FBX/FBX_AllocWrapper.h>
@@ -786,6 +787,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 
     glm::crowdio::setupGolaemProduct("GolaemForHoudini", HDK_API_VERSION);
     glm::crowdio::init();
+    glm::crowdio::displayADPDialog("en", false, HOM().qt()._mainWindow(), false);
 
     glm::Singleton<glm::HoudiniFbxData>::create();
 
