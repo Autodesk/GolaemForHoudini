@@ -62,20 +62,13 @@ def AboutWindowMain():
         print("Created QApplication instance: {0}".format(application))
 
     # Fetch license data
-    devkit.initGolaemProduct("GolaemForHoudini", None)
+    devkit.initGolaemProduct("GolaemForHoudini")
     devkit.initGolaem()
-    golaemVersion = devkit.getGolaemVersionString().rstrip()
-    golaemLicense = devkit.getGolaemLicenseString()
-    if (devkit.usingGolaemLiteLicense()):
-        golaemLicense = '1;' + golaemLicense
-    else:
-        golaemLicense = '0;' + golaemLicense
     devkit.finishGolaem()
     devkit.finishGolaemProduct()
 
     houWrapper = whw.WindowHoudiniWrapper()
-    abtUI = abt.AboutWindow(wrapper=houWrapper, golaemVersion=golaemVersion,
-                            licenseText=golaemLicense, productName="Golaem for Houdini")
+    abtUI = abt.AboutWindow(wrapper=houWrapper, productName="Golaem for Houdini")
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
     abtUI.setWindowState(abtUI.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
