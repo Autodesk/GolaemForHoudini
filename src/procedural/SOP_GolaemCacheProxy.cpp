@@ -787,7 +787,7 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 
     glm::crowdio::setupGolaemProduct("GolaemForHoudini", HDK_API_VERSION);
     glm::crowdio::init();
-    glm::crowdio::displayADPDialog("en", true, HOM().qt()._mainWindow(), true);
+    glm::crowdio::displayADPDialog("en", true, HOM().qt()._mainWindow());
 
     glm::Singleton<glm::HoudiniFbxData>::create();
 
