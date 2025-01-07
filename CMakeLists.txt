@@ -77,6 +77,7 @@ list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheLibrary.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheLayout.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/SimulationCacheProxy.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLayout.png")
+list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/W09_GOLM_about_528x90.png")
 
 foreach( configuration "Debug" "Release" )
     # install licenses
@@ -131,7 +132,8 @@ foreach( configuration "Debug" "Release" )
 
     install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/__init__.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
     install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/windowWrapper.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
-    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/aboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/golaemAboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+    install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/golaemAboutLicense.txt" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
 
     foreach( install_file ${ROOT_ICON_FILES} )
         install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons" )

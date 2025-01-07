@@ -7,8 +7,7 @@ from glm.simCacheLib import simCacheLibWindow as scl
 from glm.simCacheLib import simCacheLibWindowHoudiniWrapper as sclw
 from glm.layout import layoutEditorUtils
 from glm.layout import layoutEditorWrapper
-import glm.ui.aboutWindow as abt
-import glm.ui.windowHoudiniWrapper as whw
+import glm.ui.golaemAboutWindow as abt
 from glm.Qtpy.Qt import QtCore, QtWidgets
 import hou
 import sys
@@ -67,8 +66,7 @@ def AboutWindowMain():
     devkit.finishGolaem()
     devkit.finishGolaemProduct()
 
-    houWrapper = whw.WindowHoudiniWrapper()
-    abtUI = abt.AboutWindow(wrapper=houWrapper, productName="Golaem for Houdini")
+    abtUI = abt.GolaemAboutWindow(parent=hou.qt.mainWindow(), productName="Golaem for Houdini", golaemVersion=None, baseDir=None)
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
     abtUI.setWindowState(abtUI.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
