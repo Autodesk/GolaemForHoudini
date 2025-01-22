@@ -7,7 +7,7 @@ Thus, it avoids baking out geometry, handles geometry and shading variation and 
 
 ###
 ## License
-Golaem For Houdini source code is released under the [GNU Lesser General Public License v2.1](LICENSE).
+[Autodesk License](LICENSE).
 
 ###
 ## Prerequisites
