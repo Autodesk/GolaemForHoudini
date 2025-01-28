@@ -68,8 +68,6 @@ file(GLOB HOU_UI_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/ui/*.py")
 file(GLOB HOU_SIMCACHELIB_SCRIPT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/python/glm/simCacheLib/*.py")
 file(GLOB HOU_SHELF_FILES "${CMAKE_CURRENT_SOURCE_DIR}/shelf/*.shelf")
 
-file( GLOB LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/licenses/*.lic")
-
 set(ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLibrary.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/glmDefaultIcon.png")
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/glmAbout.png")
@@ -80,11 +78,6 @@ list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/buttonSimulationCacheLayout.png"
 list(APPEND ROOT_ICON_FILES "${GOLAEM_ICON_DIR}/W09_GOLM_about_528x90.png")
 
 foreach( configuration "Debug" "Release" )
-    # install licenses
-    foreach( install_file ${LICENSE_FILES} )
-        install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini" )
-    endforeach()
-
     # install layout icons
     foreach( install_file ${LAYOUT_ICON_FILES} )
         install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons/layoutToolv7" )
