@@ -23,6 +23,7 @@ HDK_INCLUDES_START
 #include <PRM/PRM_Range.h>
 #include <CH/CH_Manager.h>
 #include <UT/UT_Exit.h>
+#include <UT/UT_UI.h>
 #include <UT/UT_DirUtil.h>
 #include <PY/PY_Python.h>
 #include <HOM/HOM_Module.h>
@@ -787,13 +788,15 @@ void GLM_CROWDHOUDINI_API newSopOperator(OP_OperatorTable* table)
 
     glm::crowdio::setupGolaemProduct("GolaemForHoudini", HDK_API_VERSION);
     glm::crowdio::init();
-    if (HOM().isUIAvailable())
+
+    if (UTisUIAvailable())
     {
         glm::crowdio::displayADPDialog("en", true, HOM().qt()._mainWindow());
     }
     else
     {
-        glm::crowdio::displayADPDialog("en", true);
+        // do not display anything in batch mode -> do not uncomment below
+        // glm::crowdio::displayADPDialog("en", true);
     }
 
     glm::Singleton<glm::HoudiniFbxData>::create();
