@@ -38,6 +38,7 @@ HDK_INCLUDES_END
 #include <glmCore.h>
 #include <glmCrowdIO.h>
 #include <glmCrowdIOUtils.h>
+#include <glmSimulationCacheFactory.h>
 #include <glmSimulationCacheLibrary.h>
 #include <glmSimulationCacheInformation.h>
 #include <glmFileDir.h>
