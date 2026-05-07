@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <shelfSet name="Golaem" label="Golaem">
+    <memberToolshelf name="glmGeneral"/>
+  </shelfSet>
+
+  <toolshelf name="glmGeneral" label="Golaem">
+    <memberTool name="glmSimCacheLib"/>
+    <memberTool name="glmLayoutEditor"/>
+    <memberTool name="glmAbout"/>
+  </toolshelf>
+
+  <tool name="glmSimCacheLib" label="Simulation Cache Library" icon="SimulationCacheLibrary.png">
+    <helpText><![CDATA[Open the Golaem Simulation Cache Library tool]]></helpText>
+    <toolSubmenu>Golaem</toolSubmenu>
+    <toolMenuContext name="viewer">
+      <contextNetType>OBJ</contextNetType>
+      <contextNetType>SOP</contextNetType>
+    </toolMenuContext>
+    <script scriptType="python">
+      <![CDATA[import glm.ui.windowHoudiniLauncher as launcher;launcher.SimCacheLibWindowMain()]]>
+    </script>
+    <readOnly/>
+  </tool>
+  <tool name="glmLayoutEditor" label="Layout Editor" icon="SimulationCacheLayout.png">
+    <helpText><![CDATA[Open the Golaem Layout Editor]]></helpText>
+    <toolSubmenu>Golaem</toolSubmenu>
+    <toolMenuContext name="viewer">
+      <contextNetType>OBJ</contextNetType>
+      <contextNetType>SOP</contextNetType>
+    </toolMenuContext>
+    <script scriptType="python">
+      <![CDATA[import glm.ui.windowHoudiniLauncher as launcher;launcher.LayoutEditorWindowMain()]]>
+    </script>
+    <readOnly/>
+  </tool>
+  <tool name="glmAbout" label="About" icon="glmDefaultIcon.png">
+    <helpText><![CDATA[Open the Golaem About window]]></helpText>
+    <toolSubmenu>Golaem</toolSubmenu>
+    <toolMenuContext name="viewer">
+      <contextNetType>OBJ</contextNetType>
+      <contextNetType>SOP</contextNetType>
+    </toolMenuContext>
+    <script scriptType="python">
+      <![CDATA[import glm.ui.windowHoudiniLauncher as launcher;launcher.AboutWindowMain()]]>
+    </script>
+    <readOnly/>
+  </tool>
+</shelfDocument>
