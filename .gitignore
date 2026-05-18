@@ -3,6 +3,7 @@
 /bin*/
 /build*/
 /pack*/
+/install*/
 /test*/
 *.pdb
 *.pyc
