@@ -12,12 +12,6 @@ from glm.Qtpy.Qt import QtCore, QtWidgets
 import hou
 import sys
 
-usingDevkit = True
-try:
-    import glm.devkit as devkit
-except:
-    usingDevkit = False
-
 
 # **********************************************************************
 #
@@ -59,12 +53,6 @@ def AboutWindowMain():
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
         print("Created QApplication instance: {0}".format(application))
-
-    # Fetch license data
-    devkit.initGolaemProduct("GolaemForHoudini")
-    devkit.initGolaem()
-    devkit.finishGolaem()
-    devkit.finishGolaemProduct()
 
     abtUI = abt.GolaemAboutWindow(parent=hou.qt.mainWindow(), productName="Golaem for Houdini", golaemVersion=None, baseDir=None)
     abtUI.setStyleSheet("background-color: #444444")
