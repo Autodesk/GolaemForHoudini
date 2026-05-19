@@ -293,6 +293,14 @@ else()
         install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/golaemAboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
         install( FILES "${CMAKE_SOURCE_DIR}/LICENSE" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
 
+        if(MSVC)
+            set( VERSION_FILE_NAME "VERSION.txt")
+        else()
+            set( VERSION_FILE_NAME "VERSION")
+        endif()
+
+        install( CODE "file( WRITE \"${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui/${VERSION_FILE_NAME}\" \"${GLM_VERSION_LABEL}\" )" )
+
         foreach( install_file ${ROOT_ICON_FILES} )
             install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons" )
         endforeach()
