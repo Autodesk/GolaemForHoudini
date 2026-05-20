@@ -50,7 +50,7 @@ def AboutWindowMain():
     try:
         import glm.ui.golaemAboutWindowHoudini as abtHoudini
     except ImportError:
-        print("This is a standalone build, the about window is not available.")
+        print("This is a Golaem for Houdini standalone build, the about window is not available.")
         return None
     application = None
     abtUI = None
