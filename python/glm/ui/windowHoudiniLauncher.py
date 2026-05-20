@@ -7,7 +7,6 @@ from glm.simCacheLib import simCacheLibWindow as scl
 from glm.simCacheLib import simCacheLibWindowHoudiniWrapper as sclw
 from glm.layout import layoutEditorUtils
 from glm.layout import layoutEditorWrapper
-import glm.ui.golaemAboutWindow as abt
 from glm.Qtpy.Qt import QtCore, QtWidgets
 import hou
 import sys
@@ -48,13 +47,18 @@ def SimCacheLibWindowMain():
 # AboutWindowMain
 # ------------------------------------------------------------------
 def AboutWindowMain():
+    try:
+        import glm.ui.golaemAboutWindowHoudini as abtHoudini
+    except ImportError:
+        print("This is a standalone build, the about window is not available.")
+        return None
     application = None
     abtUI = None
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
         print("Created QApplication instance: {0}".format(application))
 
-    abtUI = abt.GolaemAboutWindow(parent=hou.qt.mainWindow(), productName="Golaem for Houdini", golaemVersion=None, baseDir=None)
+    abtUI = abtHoudini.GolaemAboutWindowHoudini(parent=hou.qt.mainWindow(), golaemVersion=None, baseDir=None)
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
     abtUI.setWindowState(abtUI.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
