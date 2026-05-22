@@ -6,6 +6,8 @@
 
 # pylint: disable=C0103
 
+import sys
+
 from glm.simCacheLib import simCacheLibWindow as scl
 from glm.simCacheLib import simCacheLibWindowHoudiniWrapper as sclw
 from glm.layout import layoutEditorUtils
@@ -30,6 +32,9 @@ def SimCacheLibWindowMain():
     houdiniWrapper = wrapper.WindowHoudiniWrapper()
     global glmSimCacheLibWindowUIs
     libUI = None
+    if not QtWidgets.QApplication.instance():
+        application = QtWidgets.QApplication(sys.argv)
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
     if not QtWidgets.QApplication.instance():
         houdiniWrapper.log("error", "No QApplication instance found. The Simulation Cache Library window cannot be displayed.")
         return None
@@ -60,6 +65,9 @@ def AboutWindowMain():
         houdiniWrapper.log("error", f"Error importing about window: {e}")
         return None
     if not QtWidgets.QApplication.instance():
+        application = QtWidgets.QApplication(sys.argv)
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
+    if not QtWidgets.QApplication.instance():
         houdiniWrapper.log("error", "No QApplication instance found. The About window cannot be displayed.")
         return None
 
@@ -77,6 +85,9 @@ def AboutWindowMain():
 def LayoutEditorWindowMain(layoutFile=""):
     houdiniWrapper = wrapper.WindowHoudiniWrapper()
     layoutEditor = None
+    if not QtWidgets.QApplication.instance():
+        application = QtWidgets.QApplication(sys.argv)
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
     if not QtWidgets.QApplication.instance():
         houdiniWrapper.log("error", "No QApplication instance found. The Layout Editor window cannot be displayed.")
         return None
