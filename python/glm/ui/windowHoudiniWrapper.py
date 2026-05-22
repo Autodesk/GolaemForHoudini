@@ -27,7 +27,7 @@ class WindowHoudiniWrapper(windowWrapper.WindowWrapper):
         return hou.qt.mainWindow()
 
     # ------------------------------------------------------------------
-    # log a message (level : info / warning / error)
+    # log a message (level : info / warning / error / debug )
     # ------------------------------------------------------------------
     def log(self, logLevel, message):
         if logLevel == "info":
