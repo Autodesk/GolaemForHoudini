@@ -3,20 +3,18 @@
 # * Copyright (C) Golaem S.A.  - All Rights Reserved.  *
 # * *
 # **************************************************************************
+
+# pylint: disable=C0103
+
+import sys
+
 from glm.simCacheLib import simCacheLibWindow as scl
 from glm.simCacheLib import simCacheLibWindowHoudiniWrapper as sclw
 from glm.layout import layoutEditorUtils
 from glm.layout import layoutEditorWrapper
-import glm.ui.golaemAboutWindow as abt
 from glm.Qtpy.Qt import QtCore, QtWidgets
 import hou
-import sys
-
-usingDevkit = True
-try:
-    import glm.devkit as devkit
-except:
-    usingDevkit = False
+import glm.ui.windowHoudiniWrapper as wrapper
 
 
 # **********************************************************************
@@ -31,12 +29,15 @@ glmSimCacheLibWindowUIs = []
 # SimCacheLibWindowMain
 # ------------------------------------------------------------------
 def SimCacheLibWindowMain():
+    houdiniWrapper = wrapper.WindowHoudiniWrapper()
     global glmSimCacheLibWindowUIs
-    application = None
     libUI = None
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
-        print("Created QApplication instance: {0}".format(application))
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
+    if not QtWidgets.QApplication.instance():
+        houdiniWrapper.log("error", "No QApplication instance found. The Simulation Cache Library window cannot be displayed.")
+        return None
     if len(glmSimCacheLibWindowUIs):
         libUI = glmSimCacheLibWindowUIs[0]
     else:
@@ -54,19 +55,23 @@ def SimCacheLibWindowMain():
 # AboutWindowMain
 # ------------------------------------------------------------------
 def AboutWindowMain():
-    application = None
-    abtUI = None
+    houdiniWrapper = wrapper.WindowHoudiniWrapper()
+    try:
+        import glm.ui.golaemAboutWindowHoudini as abtHoudini
+    except ModuleNotFoundError:
+        houdiniWrapper.log("warning", "This is a Golaem for Houdini standalone build, the about window is not available.")
+        return None
+    except ImportError as e:
+        houdiniWrapper.log("error", f"Error importing about window: {e}")
+        return None
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
-        print("Created QApplication instance: {0}".format(application))
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
+    if not QtWidgets.QApplication.instance():
+        houdiniWrapper.log("error", "No QApplication instance found. The About window cannot be displayed.")
+        return None
 
-    # Fetch license data
-    devkit.initGolaemProduct("GolaemForHoudini")
-    devkit.initGolaem()
-    devkit.finishGolaem()
-    devkit.finishGolaemProduct()
-
-    abtUI = abt.GolaemAboutWindow(parent=hou.qt.mainWindow(), productName="Golaem for Houdini", golaemVersion=None, baseDir=None)
+    abtUI = abtHoudini.GolaemAboutWindowHoudini(parent=hou.qt.mainWindow(), golaemVersion=None, baseDir=None)
     abtUI.setStyleSheet("background-color: #444444")
     abtUI.show()
     abtUI.setWindowState(abtUI.windowState() & ~QtCore.Qt.WindowMinimized | QtCore.Qt.WindowActive)
@@ -78,11 +83,14 @@ def AboutWindowMain():
 # LayoutEditorWindowMain
 # ------------------------------------------------------------------
 def LayoutEditorWindowMain(layoutFile=""):
-    application = None
+    houdiniWrapper = wrapper.WindowHoudiniWrapper()
     layoutEditor = None
     if not QtWidgets.QApplication.instance():
         application = QtWidgets.QApplication(sys.argv)
-        print("Created QApplication instance: {0}".format(application))
+        houdiniWrapper.log("info", "Created QApplication instance: {0}".format(application))
+    if not QtWidgets.QApplication.instance():
+        houdiniWrapper.log("error", "No QApplication instance found. The Layout Editor window cannot be displayed.")
+        return None
 
     layoutWrapper = layoutEditorWrapper.getTheLayoutEditorWrapperInstance()
     layoutEditor = layoutEditorUtils.getTheLayoutEditorInstance(parentWindow=hou.qt.mainWindow(), wrapper=layoutWrapper)

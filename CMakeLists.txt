@@ -291,7 +291,12 @@ else()
         install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/__init__.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
         install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/windowWrapper.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
         install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/golaemAboutWindow.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+        install( FILES "${GOLAEM_SCRIPT_DIR}/glm/ui/golaemAboutWindowHoudini.py" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
         install( FILES "${CMAKE_SOURCE_DIR}/LICENSE" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui" )
+
+        if(DEFINED GOLAEM_VERSION_FILE_NAME)
+            install( FILES "${CMAKE_BINARY_DIR}/${GOLAEM_VERSION_FILE_NAME}" CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/python/glm/ui")
+        endif()
 
         foreach( install_file ${ROOT_ICON_FILES} )
             install( FILES ${install_file} CONFIGURATIONS ${configuration} DESTINATION "${CROWD_INSTALL_PATH_${configuration}}/procedurals/houdini/icons" )
