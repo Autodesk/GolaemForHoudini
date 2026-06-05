@@ -935,7 +935,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             // set it to -1 in case it existed but was killed
             packedEntity->_inputData._entityId = -1;
 
-            if (!crowdio::isEntityValid(simuData, iEntity))
+            if (!glm::crowdio::isEntityValid(simuData, iEntity))
             {
                 continue;
             }
