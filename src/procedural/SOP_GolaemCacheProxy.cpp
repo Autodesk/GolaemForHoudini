@@ -935,10 +935,8 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             // set it to -1 in case it existed but was killed
             packedEntity->_inputData._entityId = -1;
 
-            int64_t entityId = simuData->_entityIds[iEntity];
-            if (entityId < 0)
+            if (!crowdio::isEntityValid(simuData, iEntity))
             {
-                // entity was probably killed
                 continue;
             }
 
@@ -955,6 +953,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
                 continue;
             }
 
+            int64_t entityId = simuData->_entityIds[iEntity];
             int32_t characterIdx = simuData->_characterIdx[iEntity];
             const glm::GolaemCharacter* character = _factory.getGolaemCharacter(characterIdx);
             if (character == NULL)
