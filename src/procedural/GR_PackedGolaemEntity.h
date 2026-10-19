@@ -65,7 +65,6 @@ namespace glm
     protected:
         void assignEntity(const GU_PackedGolaemEntity* packedEntity);
 
-#if HDK_API_VERSION >= 20000000
         void update(
             RE_RenderContext rend,
             const GT_PrimitiveHandle& primh,
@@ -88,29 +87,6 @@ namespace glm
             unsigned int pick_type,
             GR_PickStyle pick_style,
             bool has_pick_map) override;
-#else
-        void update(RE_Render* rend,
-            const GT_PrimitiveHandle& primh,
-            const GR_UpdateParms& params) override;
-
-        void render(
-            RE_Render* rend,
-            GR_RenderMode render_mode,
-            GR_RenderFlags flags,
-            GR_DrawParms drawparams) override;
-
-        void renderDecoration(
-            RE_Render* rend,
-            GR_Decoration decor,
-            const GR_DecorationParms& parms) override;
-
-        int renderPick(
-            RE_Render* rend,
-            const GR_DisplayOption* opt,
-            unsigned int pick_type,
-            GR_PickStyle pick_style,
-            bool has_pick_map) override;
-#endif
 
         void clearGeo();
     };

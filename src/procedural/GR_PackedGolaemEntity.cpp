@@ -18,9 +18,7 @@ HDK_INCLUDES_START
 #include <RE/RE_LightList.h>
 #include <GR/GR_Utils.h>
 #include <RE/RE_ElementArray.h>
-#if HDK_API_VERSION >= 20000000
 #include <GR/GR_Light.h>
-#endif
 
 HDK_INCLUDES_END
 
@@ -146,11 +144,7 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::update(
-#if HDK_API_VERSION >= 20000000
         RE_RenderContext rend,
-#else
-        RE_Render* rend,
-#endif
         const GT_PrimitiveHandle& primh,
         const GR_UpdateParms& params)
     {   
@@ -210,13 +204,6 @@ namespace glm
             {
             case GolaemDisplayMode::BOUNDING_BOX:
             {
-                // debug print all materials
-                for (auto itMat = params.material_atlas.cbegin(); itMat != params.material_atlas.cend(); ++itMat)
-                {
-                    RE_MaterialPtr currentMat = itMat->second;
-                    currentMat->getMaterialName();
-                }
-
                 // Initialize the number of points in the geometry.
                 _viewportGeo->setNumPoints(8);
                 // Initialize the number of primitives in the geometry. 6 faces
@@ -1620,11 +1607,7 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::render(
-#if HDK_API_VERSION >= 20000000
         RE_RenderContext rend,
-#else
-        RE_Render* rend,
-#endif
         GR_RenderMode render_mode,
         GR_RenderFlags flags,
         GR_DrawParms drawparams)
@@ -1724,24 +1707,13 @@ namespace glm
                 // Set up lighting for any GL3 lighting blocks
                 if (shader && drawparams.opts->getLightList())
                 {
-#if HDK_API_VERSION >= 20000000
                     drawparams.opts->getLightList()->glLights()->bindForShader(rend, shader);
-#else
-                    drawparams.opts->getLightList()->bindForShader(rend, shader);
-#endif
                 }
 
-#if HDK_API_VERSION >= 19000000
                 // set up the main material block for GL3
                 mat->updateShaderForMaterial(
                     rend, 0, true,
                     RE_SHADER_TARGET_TRIANGLE, shader);
-#else
-                mat->updateShaderForMaterial(
-                    rend, 0, true, true,
-                    RE_SHADER_TARGET_TRIANGLE, shader);
-#endif
-
             }
 
             // Draw call for the geometry
@@ -1787,11 +1759,7 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     void GR_PackedGolaemEntity::renderDecoration(
-#if HDK_API_VERSION >= 20000000
         RE_RenderContext rend,
-#else
-        RE_Render* rend,
-#endif 
         GR_Decoration decor,
         const GR_DecorationParms& parms)
     {
@@ -1807,11 +1775,7 @@ namespace glm
 
     //-----------------------------------------------------------------------------
     int GR_PackedGolaemEntity::renderPick(
-#if HDK_API_VERSION >= 20000000
         RE_RenderContext rend,
-#else
-        RE_Render* rend,
-#endif 
         const GR_DisplayOption* opt,
         unsigned int pick_type,
         GR_PickStyle pick_style,
