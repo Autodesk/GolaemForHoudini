@@ -1,11 +1,215 @@
-/***************************************************************************
-*                                                                          *
-*  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
-*                                                                          *
-***************************************************************************/
+// Copyright 2026 Autodesk, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "GR_PackedGolaemEntity.h"
 #include "GU_PackedGolaemEntity.h"
+
+HDK_INCLUDES_START
+#include <UT/UT_HDKVersion.h>
+HDK_INCLUDES_END
+
+#if HDK_API_VERSION >= 22000000
+
+HDK_INCLUDES_START
+#include <GT/GT_GEOPrimPacked.h>
+#include <GT/GT_PrimCollect.h>
+#include <GT/GT_RefineParms.h>
+#include <GU/GU_PrimPacked.h>
+HDK_INCLUDES_END
+
+#include <glmLog.h>
+
+namespace glm
+{
+    namespace
+    {
+        GT_PrimitiveHandle refineGolaemViewportGeometry(
+            const GT_PrimitiveHandle& geometry,
+            const GT_RefineParms* parms)
+        {
+            if (!geometry)
+            {
+                GLM_CROWD_TRACE_ERROR("Unable to refine Golaem viewport geometry: missing packed geometry");
+                return GT_PrimitiveHandle();
+            }
+            GT_RefineParms refineParms;
+            if (parms)
+            {
+                refineParms = *parms;
+            }
+            // Skeleton bones without a parent or child would otherwise refine to an extra point mesh.
+            refineParms.setShowUnusedPoints(false);
+            GT_PrimitiveHandle refined = GT_Primitive::refinePrimitive(geometry, &refineParms);
+            // The packed renderer accepts a renderable mesh, not a detail or collection.
+            while (const GT_PrimCollect* collection = dynamic_cast<const GT_PrimCollect*>(refined.get()))
+            {
+                if (collection->entries() != 1)
+                {
+                    GlmString primTypes;
+                    for (exint iEntry = 0; iEntry < collection->entries(); ++iEntry)
+                    {
+                        const GT_PrimitiveHandle& entry = collection->getPrim(iEntry);
+                        primTypes += (iEntry > 0 ? ", " : "");
+                        primTypes += (entry ? entry->className() : "null");
+                    }
+                    GLM_CROWD_TRACE_ERROR("Unable to refine Golaem viewport geometry: expected one mesh, received " << collection->entries() << " primitives (" << primTypes.c_str() << ")");
+                    return GT_PrimitiveHandle();
+                }
+                refined = collection->getPrim(0);
+            }
+            if (!refined)
+            {
+                GLM_CROWD_TRACE_ERROR("Unable to refine Golaem viewport geometry");
+            }
+            return refined;
+        }
+
+        GT_PrimitiveHandle makeGolaemViewportPackedPrim(const GT_PrimitiveHandle& primh)
+        {
+            const GT_GEOPrimitive* geo = dynamic_cast<const GT_GEOPrimitive*>(primh.get());
+            const GT_GEOPrimPacked* packed = dynamic_cast<const GT_GEOPrimPacked*>(primh.get());
+            const GU_PrimPacked* prim = nullptr;
+            if (geo && geo->getMotionSegments() > 0)
+            {
+                prim = dynamic_cast<const GU_PrimPacked*>(geo->getPrimitive(0));
+            }
+            else if (packed)
+            {
+                prim = packed->getPrim();
+            }
+            if (!prim || prim->getTypeId() != GU_PackedGolaemEntity::getTypeId())
+            {
+                return GT_PrimitiveHandle();
+            }
+            if (geo)
+            {
+                return new GT_GEOPrimPacked(geo->detail(0), prim, false, true);
+            }
+            GT_GEOPrimPacked* copy = new GT_GEOPrimPacked(*packed);
+            copy->setTransformed(false);
+            return copy;
+        }
+    } // namespace
+
+    GR_PackedGolaemEntityHook::GR_PackedGolaemEntityHook()
+        : GUI_PrimitiveHook("GolaemEntity", GUI_RENDER_MASK_VULKAN)
+    {
+    }
+
+    GR_PackedGolaemEntityHook::~GR_PackedGolaemEntityHook()
+    {
+    }
+
+    GR_Primitive* GR_PackedGolaemEntityHook::createPrimitive(
+        const GT_PrimitiveHandle& gt_prim,
+        const GEO_Primitive* geo_prim,
+        const GR_RenderInfo* info,
+        const char* cache_name,
+        GR_PrimAcceptResult& processed)
+    {
+        GLM_UNREFERENCED(geo_prim);
+        processed = GR_NOT_PROCESSED;
+        const GT_PrimitiveHandle packedHandle = makeGolaemViewportPackedPrim(gt_prim);
+        if (!packedHandle)
+        {
+            GLM_CROWD_TRACE_ERROR("Unable to create the Golaem Vulkan render hook: expected a packed Golaem primitive");
+            return nullptr;
+        }
+
+        const GT_GEOPrimPacked* packed = static_cast<const GT_GEOPrimPacked*>(packedHandle.get());
+        GT_PrimitiveHandle geometry;
+        GT_TransformHandle transform;
+        // Preserve packed primitive IDs and attributes for picking and material assignment.
+        packed->geometryAndTransform(nullptr, geometry, transform);
+        geometry = refineGolaemViewportGeometry(geometry, nullptr);
+        if (!geometry)
+        {
+            return nullptr;
+        }
+        const GU_ConstDetailHandle detail = packed->getPackedDetail();
+        processed = GR_PROCESSED;
+        return new GR_PackedGolaemEntity(info, cache_name, packedHandle, geometry, detail, packed->getPrim()->getMapIndex());
+    }
+
+    GR_PackedGolaemEntity::GR_PackedGolaemEntity(
+        const GR_RenderInfo* info,
+        const char* cache_name,
+        const GT_PrimitiveHandle& packed_prim,
+        const GT_PrimitiveHandle& geometry,
+        const GU_ConstDetailHandle& detail,
+        GA_Index prim_index)
+        : GR_PrimPacked(info, cache_name, packed_prim, geometry, detail, static_cast<int>(prim_index))
+        , _primitiveIndex(prim_index)
+    {
+    }
+
+    const char* GR_PackedGolaemEntity::className() const
+    {
+        return "GR_PackedGolaemEntity";
+    }
+
+    GR_PrimAcceptResult GR_PackedGolaemEntity::acceptPrimitive(
+        GT_PrimitiveType t,
+        int geo_type,
+        const GT_PrimitiveHandle& ph,
+        const GEO_Primitive* prim)
+    {
+        GLM_UNREFERENCED(t);
+        GLM_UNREFERENCED(ph);
+        // Each entity owns different deformed geometry; do not batch entities into one hook.
+        if (geo_type == GU_PackedGolaemEntity::getTypeId().get() &&
+            prim && prim->getMapIndex() == _primitiveIndex)
+        {
+            return GR_PROCESSED;
+        }
+        return GR_NOT_PROCESSED;
+    }
+
+    void GR_PackedGolaemEntity::update(
+        RE_RenderContext rend,
+        const GT_PrimitiveHandle& primh,
+        const GR_UpdateParms& p)
+    {
+        const GT_PrimitiveHandle packedHandle = makeGolaemViewportPackedPrim(primh);
+        if (!packedHandle)
+        {
+            retirePrimitive();
+            GLM_CROWD_TRACE_ERROR("Unable to update the Golaem Vulkan render hook: expected a packed Golaem primitive");
+            return;
+        }
+
+        const GT_GEOPrimPacked* packed = static_cast<const GT_GEOPrimPacked*>(packedHandle.get());
+        GT_PrimitiveHandle geometry;
+        GT_TransformHandle transform;
+        packed->geometryAndTransform(&p.refine_parms, geometry, transform);
+        geometry = refineGolaemViewportGeometry(geometry, &p.refine_parms);
+        if (!geometry)
+        {
+            retirePrimitive();
+            return;
+        }
+        const GU_ConstDetailHandle detail = packed->getPackedDetail();
+        setPackedPrim(packedHandle);
+        _primitiveIndex = packed->getPrim()->getMapIndex();
+        setPrimIndex(static_cast<int>(_primitiveIndex));
+        setInstancedPrim(geometry, detail);
+        GR_PrimPacked::update(rend, packedHandle, p);
+    }
+} // namespace glm
+
+#else
+
 #include "glmHoudiniUtils.h"
 
 HDK_INCLUDES_START
@@ -1792,3 +1996,5 @@ namespace glm
     }
 
 } // namespace glm
+
+#endif

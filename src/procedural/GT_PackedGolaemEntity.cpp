@@ -1,8 +1,16 @@
-/***************************************************************************
-*                                                                          *
-*  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
-*                                                                          *
-***************************************************************************/
+// Copyright 2026 Autodesk, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "GT_PackedGolaemEntity.h"
 #include "GU_PackedGolaemEntity.h"
@@ -14,6 +22,7 @@ HDK_INCLUDES_START
 #include <GT/GT_GEOAttributeFilter.h>
 #include <GT/GT_PrimInstance.h>
 #include <UT/UT_HDKVersion.h>
+#include <GT/GT_GEOPrimitive.h>
 #include <GT/GT_GEOPrimPacked.h>
 #include <GT/GT_PrimCollect.h>
 
@@ -68,7 +77,12 @@ namespace glm
             {
                 if (packedEntity->_viewportGeo.get() == NULL)
                 {
+#if HDK_API_VERSION >= 22000000
+                    // Keep the GEO primitive visible to the custom Vulkan render hook.
+                    packedEntity->_viewportGeo = new GT_GEOPrimitive(&geoHandle, &prim, 1);
+#else
                     packedEntity->_viewportGeo = new GT_GEOPrimPacked(geoHandle, packedPrim);
+#endif
                 }
                 return packedEntity->_viewportGeo;
             }
