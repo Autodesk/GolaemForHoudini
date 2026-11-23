@@ -1,8 +1,16 @@
-/***************************************************************************
-*                                                                          *
-*  Copyright (C) Golaem S.A.  All Rights Reserved.                         *
-*                                                                          *
-***************************************************************************/
+// Copyright 2026 Autodesk, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "GU_PackedGolaemEntity.h"
 
@@ -907,6 +915,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
         }
         totalEntityTypesCount += simuData->_entityTypeCount;
         const glm::Array<glm::PODArray<int>>& entityAssets = cachedSimulation.getFinalEntityAssets(currentFrame);
+        const glm::Array<glm::PODArray<int>>& entityDeformationOverrides = cachedSimulation.getFinalDeformationOverrideAssociations(currentFrame);
         const glm::ShaderAssetDataContainer* shaderDataContainer = cachedSimulation.getFinalShaderData(currentFrame, UINT32_MAX, true);
 
         size_t maxEntities = (size_t)floorf(simuData->_entityCount * renderPercent);
@@ -994,6 +1003,7 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                 // compute assets if needed
                 packedEntity->_inputData._assets = &entityAssets[packedEntity->_inputData._entityIndex];
+                packedEntity->_inputData._deformationOverrides = (packedEntity->_inputData._entityIndex < entityDeformationOverrides.size()) ? &entityDeformationOverrides[packedEntity->_inputData._entityIndex] : NULL;
 
                 // compute the bounding box of the current entity
                 glm::Vector3 halfExtents(1, 1, 1);
