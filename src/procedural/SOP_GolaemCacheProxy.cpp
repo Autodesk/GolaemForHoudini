@@ -989,6 +989,11 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
             packedEntity->_inputData._frameDatas[0] = frameData;
             packedEntity->_inputData._frames[0] = (double)currentFrame;
             packedEntity->_inputData._shaderDataContainer = shaderDataContainer;
+
+            // refresh assets & deformation overrides each cook: they may change per frame (asset distribution refreshed each frame)
+            // and the arrays they point into may be recomputed by the cached simulation, invalidating previously stored pointers
+            packedEntity->_inputData._assets = &entityAssets[iEntity];
+            packedEntity->_inputData._deformationOverrides = (iEntity < entityDeformationOverrides.size()) ? &entityDeformationOverrides[iEntity] : NULL;
             if (entityIsNew)
             {
                 //packedEntity->_inputData._dirMapRules // left empty for now
@@ -1000,10 +1005,6 @@ OP_ERROR SOP_GolaemCacheProxy::cookMySop(OP_Context& context)
 
                 packedEntity->_inputData._characterIdx = characterIdx;
                 packedEntity->_inputData._character = character;
-
-                // compute assets if needed
-                packedEntity->_inputData._assets = &entityAssets[packedEntity->_inputData._entityIndex];
-                packedEntity->_inputData._deformationOverrides = (packedEntity->_inputData._entityIndex < entityDeformationOverrides.size()) ? &entityDeformationOverrides[packedEntity->_inputData._entityIndex] : NULL;
 
                 // compute the bounding box of the current entity
                 glm::Vector3 halfExtents(1, 1, 1);
